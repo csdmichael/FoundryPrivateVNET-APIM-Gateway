@@ -123,13 +123,6 @@ locals {
   ui_web_app_name = var.ui_web_app_name != null ? var.ui_web_app_name : azurecaf_name.ui_web_app.result
 }
 
-check "existing_app_service_plan_location" {
-  assert {
-    condition     = var.existing_app_service_plan_name == null || lower(data.azurerm_service_plan.existing[0].location) == lower(var.location)
-    error_message = "The existing App Service plan must be in the same region as the deployment VNet and web apps. Set existing_app_service_plan_name to null to create a new plan in ${var.location}, or point it to an App Service plan in ${var.location}."
-  }
-}
-
 resource "azurecaf_name" "app_service_plan" {
   name          = var.name_prefix
   resource_type = "azurerm_app_service_plan"
@@ -329,6 +322,13 @@ resource "azurerm_linux_web_app" "api" {
   service_plan_id     = local.service_plan_id
   https_only          = true
   tags                = var.tags
+
+  lifecycle {
+    precondition {
+      condition     = var.existing_app_service_plan_name == null || lower(data.azurerm_service_plan.existing[0].location) == lower(var.location)
+      error_message = "The existing App Service plan must be in the same region as the deployment VNet and web apps. Set existing_app_service_plan_name to null to create a new plan in ${var.location}, or point it to an App Service plan in ${var.location}."
+    }
+  }
 
   identity {
     type         = "UserAssigned"

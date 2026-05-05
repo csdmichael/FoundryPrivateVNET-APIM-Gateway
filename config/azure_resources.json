@@ -24,9 +24,9 @@
     "target_endpoint": "https://aisearch-poc-myaacoub.search.windows.net"
   },
   "foundry": {
-    "account_name": "foundryprivatevnet",
-    "account_resource_id": "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.CognitiveServices/accounts/foundryprivatevnet",
-    "project_endpoint": "https://foundryprivatevnet.services.ai.azure.com/api/projects/proj-default",
+    "account_name": "002-ai-poc-private",
+    "account_resource_id": "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.CognitiveServices/accounts/002-ai-poc-private",
+    "project_endpoint": "https://002-ai-poc-private.services.ai.azure.com/api/projects/proj-default",
     "source_project_endpoint": "https://001-ai-poc.services.ai.azure.com/api/projects/001-ai-proj",
     "search_connection_name": "aisearchpocmyaacoub"
   },
