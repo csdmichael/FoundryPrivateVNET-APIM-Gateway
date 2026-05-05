@@ -10,9 +10,9 @@
   },
   "developer": {
     "name": "Michael Yaacoub at Microsoft",
-    "websiteUrl": "https://apim-poc-my.azure-api.net",
-    "privacyUrl": "https://apim-poc-my.azure-api.net/privacy",
-    "termsOfUseUrl": "https://apim-poc-my.azure-api.net/terms"
+    "websiteUrl": "https://ai-gateway-apim-poc-my.azure-api.net",
+    "privacyUrl": "https://ai-gateway-apim-poc-my.azure-api.net/privacy",
+    "termsOfUseUrl": "https://ai-gateway-apim-poc-my.azure-api.net/terms"
   },
   "description": {
     "short": "Foundry agent package for engineering design presentations.",
@@ -26,5 +26,5 @@
   "bots": [],
   "composeExtensions": [],
   "permissions": ["identity", "messageTeamMembers"],
-  "validDomains": ["apim-poc-my.azure-api.net"]
+  "validDomains": ["ai-gateway-apim-poc-my.azure-api.net"]
 }

@@ -197,18 +197,59 @@ The APIM Test console shows the imported `002-ai-poc-private` API with all OpenA
 
 ![Test Foundry API in APIM](docs/Screenshots/04.%20Test%20Foundry%20API%20in%20APIM.png)
 
-## Teams Packages
+## Teams Agent Packages
 
-Teams package generation:
+Each Foundry agent is published to Microsoft Teams as a custom app package (a `.zip` containing a Teams manifest and icons).
+
+### Package structure
+
+```
+Agent-Packages/
+├── Tax-PDF-Forms-Agent/
+│   ├── manifest.json          # Teams app manifest (v1.19)
+│   ├── color.png              # 192x192 color icon
+│   ├── outline.png            # 32x32 outline icon
+│   └── Tax-PDF-Forms-Agent.zip
+└── Eng-Design-PPT-Agent/
+    ├── manifest.json
+    ├── color.png
+    ├── outline.png
+    └── Eng-Design-PPT-Agent.zip
+```
+
+### Manifest fields
+
+Each `manifest.json` follows the [Teams manifest schema v1.19](https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json). Key fields to keep aligned with the deployment:
+
+| Field | Purpose | Current value |
+|-------|---------|---------------|
+| `id` | Unique app GUID | Differs per agent |
+| `developer.websiteUrl` | APIM gateway base URL | `https://ai-gateway-apim-poc-my.azure-api.net` |
+| `developer.privacyUrl` | Privacy policy URL | `https://ai-gateway-apim-poc-my.azure-api.net/privacy` |
+| `developer.termsOfUseUrl` | Terms of use URL | `https://ai-gateway-apim-poc-my.azure-api.net/terms` |
+| `validDomains` | Allowed domain for API calls | `["ai-gateway-apim-poc-my.azure-api.net"]` |
+
+If you change the APIM service, update `websiteUrl`, `privacyUrl`, `termsOfUseUrl`, and `validDomains` in both manifests to match the new gateway hostname.
+
+### Repackaging
+
+The packaging script zips each agent folder's `manifest.json`, `color.png`, and `outline.png` into a `.zip`:
 
 ```powershell
 ./scripts/package-teams-agents.ps1
 ```
 
-Generated packages:
+This runs automatically during `./scripts/deploy.ps1` and the GitHub Actions `post-deploy` job. To skip packaging during local deployment, use `-SkipPackage`.
 
-- `Agent-Packages/Tax-PDF-Forms-Agent/Tax-PDF-Forms-Agent.zip`
-- `Agent-Packages/Eng-Design-PPT-Agent/Eng-Design-PPT-Agent.zip`
+### Publishing to Microsoft Teams
+
+1. Open the [Teams Admin Center](https://admin.teams.microsoft.com) and go to **Teams apps > Manage apps**.
+2. Click **Upload new app** and select the `.zip` file (e.g. `Agent-Packages/Tax-PDF-Forms-Agent/Tax-PDF-Forms-Agent.zip`).
+3. Review the app details and approve it for your tenant or specific users/groups.
+4. Repeat for `Eng-Design-PPT-Agent.zip`.
+5. Users can then find and install the agents from the Teams app catalog.
+
+Alternatively, sideload for testing: in Teams, go to **Apps > Manage your apps > Upload a custom app** and select the `.zip`.
 
 ## Source-Driven Search And Agent Provisioning
 
@@ -237,8 +278,6 @@ Those wrappers now delegate to the source-driven provisioning flow instead of cl
 Important network prerequisite:
 
 - `aisearch-poc-myaacoub` must be able to reach `cosmos-ai-poc` through an approved Search shared private link resource named `cosmos-ai-poc-sql`.
-
-Before publishing to Teams, replace manifest placeholders so the package points at your APIM hostname and keep `validDomains` aligned to that gateway host.
 
 ## Demo Script
 
