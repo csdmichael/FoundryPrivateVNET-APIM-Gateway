@@ -116,6 +116,8 @@ Repository secrets configured in `csdmichael/FoundryPrivateVNET-APIM-Gateway`:
 
 GitHub environments are not required by the current workflow. The deployment runs as a single pipeline against one Terraform configuration and authenticates through the `main` branch OIDC subject.
 
+When you run the `deploy` workflow manually from GitHub Actions, `deploy_api` and `deploy_ui` inputs let you skip either app deployment. Pushes to `main` still deploy both by default.
+
 Recommended operator flow:
 
 1. Push to `main` or run the `deploy` workflow manually from GitHub Actions.
