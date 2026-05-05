@@ -13,8 +13,7 @@ terraform plan -var-file="main.tfvars.json" -out=tfplan
 terraform apply -auto-approve tfplan
 
 if (-not $SkipClone) {
-    & "$PSScriptRoot\clone-search-assets.ps1"
-    & "$PSScriptRoot\clone-foundry-agents.ps1"
+    & "$PSScriptRoot\provision-source-use-cases.ps1"
 }
 
 if (-not $SkipApim) {

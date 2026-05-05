@@ -38,7 +38,7 @@ The deployed topology is:
 
 - Terraform for VNet, subnets, private endpoints, private DNS, shared App Service Plan, App Services, identities, and diagnostics
 - APIM import spec in [openapi/foundry-privatevnet-app.openapi.json](openapi/foundry-privatevnet-app.openapi.json)
-- PowerShell automation for deployment, APIM configuration, Search asset cloning, Foundry agent cloning, Teams packaging, and prompt smoke tests
+- PowerShell automation for deployment, APIM configuration, source-driven private Search and agent provisioning, Teams packaging, and prompt smoke tests
 - Teams packages for the two retained agents
 - best-practices guidance in [docs/best-practices.md](docs/best-practices.md)
 
@@ -67,7 +67,7 @@ Main workflow:
 ./scripts/deploy.ps1
 ```
 
-That script runs Terraform init, validate, plan, and apply, then executes Search cloning, Foundry agent cloning, APIM configuration, Teams package generation, and sample prompt tests.
+That script runs Terraform init, validate, plan, and apply, then provisions the retained Search indexes and Foundry agents from the source-controlled definitions in `csdmichael/AI-Search-Blob-Storage`, configures APIM, generates Teams packages, and runs sample prompt tests.
 
 ## GitHub Actions Setup
 
@@ -89,6 +89,7 @@ Azure RBAC granted to that identity:
 - `Contributor` on resource group `ai-myaacoub`
 - `Azure AI Developer` on `foundryprivatevnet`
 - `Azure AI Developer` on `001-ai-poc`
+- `Search Service Contributor` on `aisearch-poc-myaacoub`
 
 Repository secrets configured in `csdmichael/FoundryPrivateVNET-APIM-Gateway`:
 
@@ -116,6 +117,9 @@ Notes:
 - The workflow uses a single Terraform configuration and a branch-scoped OIDC credential for `main`.
 - The UI deployment job publishes the Angular build output from `ui/www`, and the App Service is configured to serve that static bundle through `pm2`.
 - The sample prompt smoke test runs through APIM, not directly against the backend App Service.
+- Post-deploy provisioning now clones `https://github.com/csdmichael/AI-Search-Blob-Storage` at runtime and overlays this repo's private Foundry, Search, and Cosmos resource settings.
+- The private Foundry project uses the `aisearchpocmyaacoub` Azure AI Search connection created by `scripts/ensure-foundry-search-connection.ps1`.
+- The private Search service must have a shared private link to `cosmos-ai-poc` approved before Cosmos-backed Search indexers can populate data.
 
 ## APIM Configuration
 
@@ -149,6 +153,34 @@ Generated packages:
 
 - `Agent-Packages/Tax-PDF-Forms-Agent/Tax-PDF-Forms-Agent.zip`
 - `Agent-Packages/Eng-Design-PPT-Agent/Eng-Design-PPT-Agent.zip`
+
+## Source-Driven Search And Agent Provisioning
+
+The deployment no longer clones live Azure Search objects or live Foundry agents from the source environment.
+
+Instead, the post-deploy step clones `https://github.com/csdmichael/AI-Search-Blob-Storage`, overlays the private target resource settings from this repo, and provisions only the retained use cases:
+
+- `tax_pdf_forms`
+- `eng_design_ppt`
+
+The provisioning wrapper is:
+
+```powershell
+./scripts/provision-source-use-cases.ps1
+```
+
+Compatibility entrypoints still exist:
+
+```powershell
+./scripts/clone-search-assets.ps1
+./scripts/clone-foundry-agents.ps1
+```
+
+Those wrappers now delegate to the source-driven provisioning flow instead of cloning live Azure objects.
+
+Important network prerequisite:
+
+- `aisearch-poc-myaacoub` must be able to reach `cosmos-ai-poc` through an approved Search shared private link resource named `cosmos-ai-poc-sql`.
 
 Before publishing to Teams, replace manifest placeholders so the package points at your APIM hostname and keep `validDomains` aligned to that gateway host.
 
