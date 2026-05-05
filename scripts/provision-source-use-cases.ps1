@@ -62,17 +62,7 @@ $sourceCreateSearchScript = $sourceCreateSearchScript.Replace(
     '    credential = DefaultAzureCredential()',
     '    credential = AzureKeyCredential(os.environ["AZURE_AI_SEARCH_KEY"])'
 )
-$sourceCreateSearchScript = $sourceCreateSearchScript.Replace(
-    '    connection_string = f"ResourceId={COSMOSDB_RESOURCE_ID};Database={COSMOSDB_DATABASE};IdentityAuthType=AccessToken;"',
-    '    connection_string = os.environ["AZURE_COSMOS_CONNECTION_STRING"]'
-)
 [System.IO.File]::WriteAllText($sourceCreateSearchScriptPath, $sourceCreateSearchScript, $utf8NoBom)
-
-$cosmosConnectionString = az cosmosdb keys list --name $config.cosmosdb.account_name --resource-group $config.resource_group --type connection-strings --query connectionStrings[0].connectionString -o tsv
-if (-not $cosmosConnectionString) {
-    throw "Unable to retrieve Cosmos DB connection string for $($config.cosmosdb.account_name)."
-}
-$env:AZURE_COSMOS_CONNECTION_STRING = "$cosmosConnectionString;Database=$($config.cosmosdb.database_name)"
 
 $searchAdminKey = az search admin-key show --service-name $config.search.target_service_name --resource-group $config.resource_group --query primaryKey -o tsv
 if (-not $searchAdminKey) {

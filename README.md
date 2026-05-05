@@ -119,7 +119,9 @@ Notes:
 - The sample prompt smoke test runs through APIM, not directly against the backend App Service.
 - Post-deploy provisioning now clones `https://github.com/csdmichael/AI-Search-Blob-Storage` at runtime and overlays this repo's private Foundry, Search, and Cosmos resource settings.
 - The private Foundry project uses the `aisearchpocmyaacoub` Azure AI Search connection created by `scripts/ensure-foundry-search-connection.ps1`.
-- The private Search service must have a shared private link to `cosmos-ai-poc` approved before Cosmos-backed Search indexers can populate data.
+- The private Search service must have a system-assigned managed identity enabled.
+- That Search managed identity must have Cosmos DB account reader plus Cosmos SQL data access on `cosmos-ai-poc`.
+- The private Search service must have an approved shared private link to `cosmos-ai-poc` named `cosmos-ai-poc-sql` before Cosmos-backed Search indexers can populate data.
 
 ## APIM Configuration
 
