@@ -52,6 +52,25 @@ function Remove-StateAddresses {
     }
 }
 
+function Get-TrackedResourceId {
+    param(
+        [string]$Address
+    )
+
+    $stateOutput = & terraform state show -no-color $Address 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $stateOutput) {
+        return $null
+    }
+
+    foreach ($line in $stateOutput) {
+        if ($line -match '^\s*id\s*=\s*"?(.*?)"?$') {
+            return $matches[1]
+        }
+    }
+
+    return $null
+}
+
 $imports = @(
     @{ Address = 'azurerm_log_analytics_workspace.main'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.OperationalInsights/workspaces/$logAnalyticsName" },
     @{ Address = 'azurerm_virtual_network.main'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Network/virtualNetworks/$vnetName" },
@@ -114,23 +133,39 @@ $trackedAddresses = @(terraform state list 2>$null)
 foreach ($import in $imports) {
     $address = $import.Address
     $resourceId = $import.Id
-
-    if ($trackedAddresses -contains $address) {
-        Write-Host "Already tracked: $address"
-        continue
-    }
+    $isTracked = $trackedAddresses -contains $address
 
     if ([string]::IsNullOrWhiteSpace($resourceId)) {
-        Write-Host "Not present in Azure, skipping: $address"
+        if ($isTracked) {
+            Write-Host "Missing in Azure, removing stale state: $address"
+            & terraform state rm $address | Out-Null
+        }
+
+        Write-Host "No resource ID resolved, skipping: $address"
         continue
     }
 
-    az resource show --ids $resourceId -o none 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Not present in Azure, skipping: $address"
-        continue
+    if ($isTracked) {
+        $trackedId = Get-TrackedResourceId -Address $address
+        if ($trackedId -eq $resourceId) {
+            Write-Host "Already tracked: $address"
+            continue
+        }
+
+        Write-Host "State drift detected, replacing tracked resource: $address"
+        & terraform state rm $address | Out-Null
     }
 
     Write-Host "Importing $address"
-    & terraform import '-var-file=main.tfvars.json' $address $resourceId
+    $importOutput = & terraform import '-var-file=main.tfvars.json' $address $resourceId 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        $outputText = $importOutput | Out-String
+        if ($outputText -match 'Cannot import non-existent') {
+            Write-Host "Not present in Azure, skipping: $address"
+        }
+        else {
+            Write-Host $outputText
+            throw "terraform import failed for $address"
+        }
+    }
 }
