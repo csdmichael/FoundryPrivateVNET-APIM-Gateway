@@ -9,8 +9,8 @@
     "ui_url": "https://foundry-privatevnet-ui.azurewebsites.net"
   },
   "apim": {
-    "resource_id": "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.ApiManagement/service/apim-poc-my",
-    "gateway_url": "https://apim-poc-my.azure-api.net",
+    "resource_id": "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.ApiManagement/service/ai-gateway-apim-poc-my",
+    "gateway_url": "https://ai-gateway-apim-poc-my.azure-api.net",
     "api_path": "foundry-privatevnet-app",
     "product_name": "foundry-privatevnet-product",
     "backend_api_name": "foundry-privatevnet-app-api",

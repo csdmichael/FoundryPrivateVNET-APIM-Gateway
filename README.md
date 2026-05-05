@@ -20,8 +20,9 @@ The main design goal is to place APIM in front of Foundry so gateway concerns ar
 | UI | https://foundry-privatevnet-ui.azurewebsites.net |
 | API | https://foundry-privatevnet-api.azurewebsites.net/api |
 | API Health | https://foundry-privatevnet-api.azurewebsites.net/api/health |
-| APIM Gateway | https://apim-poc-my.azure-api.net |
-| APIM API Surface | https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api |
+| APIM Gateway | https://ai-gateway-apim-poc-my.azure-api.net |
+| APIM API Surface | https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api |
+| Foundry OpenAI Gateway | https://ai-gateway-apim-poc-my.azure-api.net/002-ai-poc-private/openai |
 
 ## Solution Overview
 
@@ -67,7 +68,7 @@ Main workflow:
 ./scripts/deploy.ps1
 ```
 
-That script runs Terraform validate plus a direct apply by default, then provisions the retained Search indexes and Foundry agents from the source-controlled definitions in `csdmichael/AI-Search-Blob-Storage`, configures APIM, generates Teams packages, and runs sample prompt tests.
+That script runs Terraform validate plus a direct apply by default, then provisions the retained Search indexes and Foundry agents from the source-controlled definitions in `csdmichael/AI-Search-Blob-Storage`, configures the UI/API APIM surface, configures the Foundry OpenAI APIM gateway, generates Teams packages, and runs sample prompt tests.
 
 App Service infrastructure is opt-in. Use `-DeployApi` and `-DeployUi` only when you want Terraform to manage the web apps and their shared App Service plan.
 
@@ -75,6 +76,12 @@ For faster iterative deployments, skip steps you are not changing:
 
 ```powershell
 ./scripts/deploy.ps1 -SkipTests -SkipPackage
+```
+
+To include App Service resources in a local deployment run:
+
+```powershell
+./scripts/deploy.ps1 -DeployApi -DeployUi
 ```
 
 If you want the slower two-step Terraform flow with a saved plan file, use:
@@ -101,7 +108,7 @@ Federated credentials configured on that identity:
 Azure RBAC granted to that identity:
 
 - `Contributor` on resource group `ai-myaacoub`
-- `Azure AI Developer` on `foundryprivatevnet`
+- `Azure AI Developer` on `002-ai-poc-private`
 - `Azure AI Developer` on `001-ai-poc`
 - `Search Service Contributor` on `aisearch-poc-myaacoub`
 
@@ -114,19 +121,20 @@ Repository secrets configured in `csdmichael/FoundryPrivateVNET-APIM-Gateway`:
 | `AZURE_SUBSCRIPTION_ID` | `86b37969-9445-49cf-b03f-d8866235171c` |
 | `API_WEBAPP_NAME` | `foundry-privatevnet-api` |
 | `UI_WEBAPP_NAME` | `foundry-privatevnet-ui` |
-| `APP_API_BASE_URL` | `https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api` |
+| `APP_API_BASE_URL` | `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api` |
 
 GitHub environments are not required by the current workflow. The deployment runs as a single pipeline against one Terraform configuration and authenticates through the `main` branch OIDC subject.
 
-When you run the `deploy` workflow manually from GitHub Actions, `deploy_api` and `deploy_ui` inputs let you opt into either app deployment. Pushes to `main` now run the infrastructure and post-deploy gateway/provisioning flow without redeploying the App Services.
+When you run the `deploy` workflow manually from GitHub Actions, `deploy_api` and `deploy_ui` default to `false` and let you opt into either app deployment. Pushes to `main` run the infrastructure and post-deploy gateway/provisioning flow without redeploying the App Services.
 
 Recommended operator flow:
 
 1. Push to `main` or run the `deploy` workflow manually from GitHub Actions.
-2. Let the `terraform` job finish before checking the app deployments.
-3. Validate `https://foundry-privatevnet-api.azurewebsites.net/api/health`.
-4. Validate `https://foundry-privatevnet-ui.azurewebsites.net`.
-5. Validate the APIM gateway path `https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api`.
+2. Let the `terraform` and `post-deploy` jobs finish before checking APIM and Foundry connectivity.
+3. If you enabled app deployment, validate `https://foundry-privatevnet-api.azurewebsites.net/api/health`.
+4. If you enabled app deployment, validate `https://foundry-privatevnet-ui.azurewebsites.net`.
+5. Validate the APIM app path `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api`.
+6. Validate the Foundry OpenAI APIM path `https://ai-gateway-apim-poc-my.azure-api.net/002-ai-poc-private/openai`.
 
 Notes:
 
@@ -141,7 +149,10 @@ Notes:
 
 ## APIM Configuration
 
-The backend OpenAPI surface is imported into APIM and then bound to the deployed API backend.
+The deployment configures two APIM surfaces:
+
+- the backend OpenAPI surface for the app at `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api`
+- the Foundry OpenAI gateway at `https://ai-gateway-apim-poc-my.azure-api.net/002-ai-poc-private/openai`
 
 ```powershell
 ./scripts/configure-apim.ps1
@@ -150,7 +161,7 @@ The backend OpenAPI surface is imported into APIM and then bound to the deployed
 
 The production UI is configured to call:
 
-- `https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api`
+- `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api`
 
 Backend settings used by the App Service deployment:
 
@@ -209,11 +220,12 @@ Use this sequence for a live walkthrough after the GitHub Actions deployment com
 
 1. Open the UI at `https://foundry-privatevnet-ui.azurewebsites.net` and show the two retained use cases.
 2. Open the API health endpoint at `https://foundry-privatevnet-api.azurewebsites.net/api/health`.
-3. Open the APIM surface at `https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api/health` to show the gateway hop.
+3. Open the APIM surface at `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api/health` to show the gateway hop.
+4. Open the Foundry OpenAI gateway at `https://ai-gateway-apim-poc-my.azure-api.net/002-ai-poc-private/openai`.
 4. Run the packaged smoke tests:
 
 ```powershell
-$env:APP_API_BASE_URL = "https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api"
+$env:APP_API_BASE_URL = "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api"
 ./scripts/test-sample-prompts.ps1
 ```
 
@@ -235,7 +247,7 @@ Best practices:
 Teams packaging steps:
 
 1. Update the manifest in `Agent-Packages/<AgentName>/manifest.json`.
-2. Keep `developer.websiteUrl`, `developer.privacyUrl`, `developer.termsOfUseUrl`, and `validDomains` set to `https://apim-poc-my.azure-api.net`.
+2. Keep `developer.websiteUrl`, `developer.privacyUrl`, `developer.termsOfUseUrl`, and `validDomains` set to `https://ai-gateway-apim-poc-my.azure-api.net`.
 3. If you add bot, tab, message extension, or Copilot endpoints later, point those URLs to the APIM route for that agent rather than to `azurewebsites.net`.
 4. Rebuild the package with:
 
@@ -248,7 +260,7 @@ Teams packaging steps:
 Adapting the same agent for other platforms:
 
 1. Keep the manifest or app configuration client-specific, but keep the backend route APIM-specific.
-2. Expose only the APIM route that corresponds to the intended agent, for example `https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api` plus the agent path managed by APIM.
+2. Expose only the APIM route that corresponds to the intended agent, for example `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api` plus the agent path managed by APIM.
 3. Mirror the same hostname allowlist policy used in Teams packages.
 4. Treat APIM as the place for auth, policy, throttling, subscriptions, and backend rewrites so each client package stays thin.
 
@@ -257,7 +269,7 @@ Adapting the same agent for other platforms:
 Run sample prompts against a deployed API:
 
 ```powershell
-$env:APP_API_BASE_URL = "https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api"
+$env:APP_API_BASE_URL = "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api"
 ./scripts/test-sample-prompts.ps1
 ```
 

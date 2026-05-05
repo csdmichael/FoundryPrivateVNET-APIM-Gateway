@@ -245,6 +245,7 @@ resource "azurerm_subnet" "private_endpoints" {
   resource_group_name                       = data.azurerm_resource_group.target.name
   virtual_network_name                      = azurerm_virtual_network.main.name
   address_prefixes                          = ["10.40.2.0/24"]
+  service_endpoints                         = ["Microsoft.CognitiveServices"]
   private_endpoint_network_policies         = "Disabled"
   private_link_service_network_policies_enabled = false
 }
