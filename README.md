@@ -83,8 +83,6 @@ Provisioned Azure identity:
 Federated credentials configured on that identity:
 
 - `repo:csdmichael/FoundryPrivateVNET-APIM-Gateway:ref:refs/heads/main`
-- `repo:csdmichael/FoundryPrivateVNET-APIM-Gateway:environment:dev`
-- `repo:csdmichael/FoundryPrivateVNET-APIM-Gateway:environment:prod`
 
 Azure RBAC granted to that identity:
 
@@ -103,10 +101,7 @@ Repository secrets configured in `csdmichael/FoundryPrivateVNET-APIM-Gateway`:
 | `UI_WEBAPP_NAME` | `foundry-privatevnet-ui` |
 | `APP_API_BASE_URL` | `https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api` |
 
-GitHub environments expected by the workflow:
-
-- `dev`
-- `prod`
+GitHub environments are not required by the current workflow. The deployment runs as a single pipeline against one Terraform configuration and authenticates through the `main` branch OIDC subject.
 
 Recommended operator flow:
 
@@ -118,7 +113,7 @@ Recommended operator flow:
 
 Notes:
 
-- The `terraform` job uses GitHub environments, which is why the managed identity has environment-scoped federated credentials for `dev` and `prod` in addition to the branch-scoped credential for `main`.
+- The workflow uses a single Terraform configuration and a branch-scoped OIDC credential for `main`.
 - The UI deployment job publishes the Angular build output from `ui/www`, and the App Service is configured to serve that static bundle through `pm2`.
 - The sample prompt smoke test runs through APIM, not directly against the backend App Service.
 

@@ -12,10 +12,6 @@ env:
 jobs:
   terraform:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        environment: [dev, prod]
-    environment: ${{ matrix.environment }}
     permissions:
       id-token: write
       contents: read
@@ -29,6 +25,9 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
       - name: Terraform init
         run: terraform init
+      - name: Import existing Azure resources
+        shell: pwsh
+        run: ./scripts/terraform-import-existing.ps1
       - name: Terraform validate
         run: terraform validate
       - name: Terraform plan

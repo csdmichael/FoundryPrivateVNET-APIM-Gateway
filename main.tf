@@ -70,6 +70,16 @@ variable "app_service_plan_sku" {
   default = "P1v3"
 }
 
+variable "api_web_app_name" {
+  type    = string
+  default = null
+}
+
+variable "ui_web_app_name" {
+  type    = string
+  default = null
+}
+
 variable "tags" {
   type    = map(string)
   default = {
@@ -108,6 +118,9 @@ data "azurerm_service_plan" "existing" {
 locals {
   location_slug = replace(lower(var.location), " ", "")
   service_plan_id = var.existing_app_service_plan_name != null ? data.azurerm_service_plan.existing[0].id : azurerm_service_plan.main[0].id
+  web_app_location = var.existing_app_service_plan_name != null ? data.azurerm_service_plan.existing[0].location : var.location
+  api_web_app_name = var.api_web_app_name != null ? var.api_web_app_name : azurecaf_name.api_web_app.result
+  ui_web_app_name = var.ui_web_app_name != null ? var.ui_web_app_name : azurecaf_name.ui_web_app.result
 }
 
 resource "azurecaf_name" "app_service_plan" {
@@ -303,9 +316,9 @@ resource "azurerm_service_plan" "main" {
 }
 
 resource "azurerm_linux_web_app" "api" {
-  name                = azurecaf_name.api_web_app.result
+  name                = local.api_web_app_name
   resource_group_name = data.azurerm_resource_group.target.name
-  location            = var.location
+  location            = local.web_app_location
   service_plan_id     = local.service_plan_id
   https_only          = true
   tags                = var.tags
@@ -320,7 +333,7 @@ resource "azurerm_linux_web_app" "api" {
     WEBSITE_RUN_FROM_PACKAGE       = "1"
     APIM_GATEWAY_URL               = data.azurerm_api_management.apim.gateway_url
     APIM_SUBSCRIPTION_KEY          = ""
-    ALLOWED_ORIGINS                = "https://${azurecaf_name.ui_web_app.result}.azurewebsites.net,http://localhost:4200"
+    ALLOWED_ORIGINS                = "https://${local.ui_web_app_name}.azurewebsites.net,http://localhost:4200"
   }
 
   site_config {
@@ -337,9 +350,9 @@ resource "azurerm_linux_web_app" "api" {
 }
 
 resource "azurerm_linux_web_app" "ui" {
-  name                = azurecaf_name.ui_web_app.result
+  name                = local.ui_web_app_name
   resource_group_name = data.azurerm_resource_group.target.name
-  location            = var.location
+  location            = local.web_app_location
   service_plan_id     = local.service_plan_id
   https_only          = true
   tags                = var.tags
