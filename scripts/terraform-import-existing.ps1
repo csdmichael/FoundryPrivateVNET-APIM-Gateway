@@ -157,11 +157,13 @@ foreach ($import in $imports) {
     }
 
     Write-Host "Importing $address"
+    Write-Host "Importing $address"
     $importOutput = & terraform import '-var-file=main.tfvars.json' $address $resourceId 2>&1
     if ($LASTEXITCODE -ne 0) {
         $outputText = $importOutput | Out-String
-        if ($outputText -match 'Cannot import non-existent') {
+        if ($outputText -match 'Cannot import non-existent|not found|does not exist') {
             Write-Host "Not present in Azure, skipping: $address"
+            $global:LASTEXITCODE = 0
         }
         else {
             Write-Host $outputText
@@ -169,3 +171,5 @@ foreach ($import in $imports) {
         }
     }
 }
+
+exit 0
