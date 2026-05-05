@@ -50,7 +50,9 @@ $imports = @(
     @{ Address = 'azurerm_private_endpoint.foundry'; Id = $foundryPrivateEndpointId },
     @{ Address = 'azurerm_private_endpoint.search'; Id = $searchPrivateEndpointId },
     @{ Address = 'azurerm_linux_web_app.api'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/$apiWebAppName" },
-    @{ Address = 'azurerm_linux_web_app.ui'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/$uiWebAppName" }
+    @{ Address = 'azurerm_linux_web_app.ui'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/$uiWebAppName" },
+    @{ Address = 'azurerm_monitor_diagnostic_setting.api'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/$apiWebAppName|api-to-law" },
+    @{ Address = 'azurerm_monitor_diagnostic_setting.ui'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/$uiWebAppName|ui-to-law" }
 )
 
 $trackedAddresses = @(terraform state list 2>$null)
