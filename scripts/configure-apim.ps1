@@ -7,9 +7,9 @@ $apimName = ($config.apim.resource_id -split '/')[-1]
 $apiSpec = Resolve-Path .\openapi\foundry-privatevnet-app.openapi.json
 $apiId = $config.apim.backend_api_name
 $productId = $config.apim.product_name
-$apiPath = 'foundry-privatevnet-app'
+$apiPath = $config.apim.api_path
 $apiDisplayName = 'Foundry Private VNET App API'
-$backendUrl = if ($env:API_BACKEND_URL) { $env:API_BACKEND_URL } else { 'https://replace-api-app.azurewebsites.net' }
+$backendUrl = if ($env:API_BACKEND_URL) { $env:API_BACKEND_URL } else { $config.app_services.api_url }
 
 az apim api import --resource-group $resourceGroup --service-name $apimName --path $apiPath --api-id $apiId --specification-format OpenApiJson --specification-path $apiSpec --service-url $backendUrl | Out-Null
 

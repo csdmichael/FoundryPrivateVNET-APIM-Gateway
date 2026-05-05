@@ -65,3 +65,21 @@ def uc_agent_config(use_case: str | None = None) -> dict:
 
 def project_endpoint() -> str:
     return azure_resources()["foundry"]["project_endpoint"]
+
+
+def apim_gateway_url() -> str:
+    return azure_resources()["apim"]["gateway_url"]
+
+
+def apim_api_base_url() -> str:
+    apim = azure_resources()["apim"]
+    return f"{apim['gateway_url']}/{apim['api_path']}/api"
+
+
+def app_service_urls() -> dict:
+    return azure_resources()["app_services"]
+
+
+def default_allowed_origins() -> str:
+    apps = azure_resources()["app_services"]
+    return f"{apps['ui_url']},http://localhost:4200"

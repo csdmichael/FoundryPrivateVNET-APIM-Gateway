@@ -17,9 +17,9 @@ The architecture diagram is in [docs/architecture.png](docs/architecture.png).
 
 | Service | URL |
 |---------|-----|
-| UI | https://ai-search-agent-ui.azurewebsites.net |
-| API | https://ai-search-agent-api.azurewebsites.net/api |
-| API Health | https://ai-search-agent-api.azurewebsites.net/api/health |
+| UI | https://foundry-privatevnet-ui.azurewebsites.net |
+| API | https://foundry-privatevnet-api.azurewebsites.net/api |
+| API Health | https://foundry-privatevnet-api.azurewebsites.net/api/health |
 | APIM Gateway | https://apim-poc-my.azure-api.net |
 | APIM API Surface | https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api |
 

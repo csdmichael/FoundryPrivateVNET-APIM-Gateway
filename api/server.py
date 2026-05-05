@@ -19,7 +19,7 @@ _allowed_origins = [
     origin.strip()
     for origin in os.environ.get(
         "ALLOWED_ORIGINS",
-        "http://localhost:4200,http://localhost:8100,https://foundry-privatevnet-ui.azurewebsites.net",
+        config.default_allowed_origins(),
     ).split(",")
     if origin.strip()
 ]
