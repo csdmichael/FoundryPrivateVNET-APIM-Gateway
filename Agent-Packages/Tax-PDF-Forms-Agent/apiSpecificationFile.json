@@ -1,0 +1,65 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Tax PDF Forms Agent",
+    "version": "1.0.0",
+    "description": "Chat with the Tax PDF Forms agent via APIM"
+  },
+  "servers": [
+    {
+      "url": "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api"
+    }
+  ],
+  "paths": {
+    "/chat": {
+      "post": {
+        "operationId": "chatWithAgent",
+        "summary": "Send a message to the Tax PDF Forms agent",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["prompt"],
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "The user's question about tax PDF forms"
+                  },
+                  "use_case": {
+                    "type": "string",
+                    "default": "tax_pdf_forms",
+                    "enum": ["tax_pdf_forms"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Agent response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "prompt": { "type": "string" },
+                    "response": { "type": "string" },
+                    "use_case": { "type": "string" },
+                    "duration_ms": { "type": "integer" },
+                    "sources": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

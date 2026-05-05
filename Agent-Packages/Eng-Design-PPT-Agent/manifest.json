@@ -22,12 +22,27 @@
     "color": "color.png"
   },
   "accentColor": "#0F6CBD",
-  "staticTabs": [
+  "composeExtensions": [
     {
-      "entityId": "eng-design-ppt",
-      "name": "Eng Design PPT",
-      "contentUrl": "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api",
-      "scopes": ["personal"]
+      "composeExtensionType": "apiBased",
+      "apiSpecificationFile": "apiSpecificationFile.json",
+      "commands": [
+        {
+          "id": "chatWithAgent",
+          "type": "query",
+          "title": "Ask Eng Design PPT",
+          "description": "Ask a question about engineering design presentations",
+          "initialRun": false,
+          "parameters": [
+            {
+              "name": "prompt",
+              "title": "Question",
+              "description": "Your question about engineering design presentations",
+              "inputType": "text"
+            }
+          ]
+        }
+      ]
     }
   ],
   "permissions": ["identity", "messageTeamMembers"],

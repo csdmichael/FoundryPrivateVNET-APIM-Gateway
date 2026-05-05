@@ -11,5 +11,5 @@ foreach ($package in $packages) {
     if (Test-Path $zipPath) {
         Remove-Item $zipPath -Force
     }
-    Compress-Archive -Path (Join-Path $package.Folder 'manifest.json'),(Join-Path $package.Folder 'color.png'),(Join-Path $package.Folder 'outline.png') -DestinationPath $zipPath
+    Compress-Archive -Path (Join-Path $package.Folder 'manifest.json'),(Join-Path $package.Folder 'color.png'),(Join-Path $package.Folder 'outline.png'),(Join-Path $package.Folder 'apiSpecificationFile.json') -DestinationPath $zipPath
 }

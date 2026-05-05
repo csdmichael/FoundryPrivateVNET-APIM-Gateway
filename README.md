@@ -199,23 +199,29 @@ The APIM Test console shows the imported `002-ai-poc-private` API with all OpenA
 
 ## Teams Agent Packages
 
-Each Foundry agent is published to Microsoft Teams as a custom app package (a `.zip` containing a Teams manifest and icons).
+Each Foundry agent is published to Microsoft Teams as an API-based message extension. Users invoke the agent from the Teams compose box, send a question, and receive the agent's response — all routed through APIM with no bot registration required.
 
 ### Package structure
 
 ```
 Agent-Packages/
 ├── Tax-PDF-Forms-Agent/
-│   ├── manifest.json          # Teams app manifest (v1.19)
-│   ├── color.png              # 192x192 color icon
-│   ├── outline.png            # 32x32 outline icon
+│   ├── manifest.json              # Teams app manifest (v1.19)
+│   ├── apiSpecificationFile.json  # OpenAPI spec pointing to APIM /chat endpoint
+│   ├── color.png                  # 192x192 color icon
+│   ├── outline.png                # 32x32 outline icon (white + transparent)
 │   └── Tax-PDF-Forms-Agent.zip
 └── Eng-Design-PPT-Agent/
     ├── manifest.json
+    ├── apiSpecificationFile.json
     ├── color.png
     ├── outline.png
     └── Eng-Design-PPT-Agent.zip
 ```
+
+### How it works
+
+Each package uses a `composeExtensions` entry with `composeExtensionType: "apiBased"`. Teams reads the bundled `apiSpecificationFile.json` (an OpenAPI spec) to know how to call the APIM `/chat` endpoint. When the user types a question in the compose box, Teams sends a POST to `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api/chat` with the `prompt` and `use_case`, and renders the response as an adaptive card.
 
 ### Manifest fields
 
@@ -225,12 +231,10 @@ Each `manifest.json` follows the [Teams manifest schema v1.19](https://developer
 |-------|---------|---------------|
 | `id` | Unique app GUID | Differs per agent |
 | `developer.websiteUrl` | APIM gateway base URL | `https://ai-gateway-apim-poc-my.azure-api.net` |
-| `developer.privacyUrl` | Privacy policy URL | `https://ai-gateway-apim-poc-my.azure-api.net/privacy` |
-| `developer.termsOfUseUrl` | Terms of use URL | `https://ai-gateway-apim-poc-my.azure-api.net/terms` |
-| `staticTabs[].contentUrl` | Personal tab content URL | `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api` |
+| `composeExtensions[].apiSpecificationFile` | Bundled OpenAPI spec | `apiSpecificationFile.json` |
 | `validDomains` | Allowed domain for API calls | `["ai-gateway-apim-poc-my.azure-api.net"]` |
 
-If you change the APIM service, update all URL fields and `validDomains` in both manifests to match the new gateway hostname.
+If you change the APIM service, update `developer.*Url`, `validDomains` in both manifests, and the `servers[].url` in both `apiSpecificationFile.json` files.
 
 ### Icon requirements
 
@@ -243,7 +247,7 @@ Teams enforces strict icon rules:
 
 ### Repackaging
 
-The packaging script zips each agent folder's `manifest.json`, `color.png`, and `outline.png` into a `.zip`:
+The packaging script zips each agent folder's `manifest.json`, `apiSpecificationFile.json`, `color.png`, and `outline.png` into a `.zip`:
 
 ```powershell
 ./scripts/package-teams-agents.ps1
@@ -258,9 +262,11 @@ The [Teams Developer Portal](https://dev.teams.microsoft.com) lets you test and 
 1. Go to [https://dev.teams.microsoft.com](https://dev.teams.microsoft.com).
 2. Click **Apps** → **Import app**.
 3. Upload the `.zip` file (e.g. `Agent-Packages/Tax-PDF-Forms-Agent/Tax-PDF-Forms-Agent.zip`).
-4. The portal validates the manifest, icons, and schema. Fix any errors before proceeding.
+4. The portal validates the manifest, icons, schema, and OpenAPI spec. Fix any errors before proceeding.
 5. Click **Preview in Teams** to install the app for yourself.
-6. Repeat for `Eng-Design-PPT-Agent.zip`.
+6. In Teams, open the compose box in any chat, click the **...** (extensions) menu, and select the agent.
+7. Type your question — Teams calls the APIM `/chat` endpoint and shows the response.
+8. Repeat for `Eng-Design-PPT-Agent.zip`.
 
 This bypasses the Teams Admin Center approval flow and installs the app only for your account.
 
@@ -270,8 +276,8 @@ This bypasses the Teams Admin Center approval flow and installs the app only for
 |-------|-------|-----|
 | `packageName` not defined | Deprecated field in manifest | Remove the `packageName` property |
 | Color icon wrong dimension | `color.png` is not 192x192 | Regenerate as 192x192 PNG |
-| Outline icon wrong format | `outline.png` is not 32x32 white+transparent | Regenerate as 32x32, white on transparent PNG |
-| No Supported Products | Manifest has no `staticTabs`, `bots`, or `composeExtensions` | Add a `staticTabs` entry with a personal scope |
+| Outline icon not transparent | `outline.png` has non-transparent background | Regenerate as 32x32, white on transparent PNG |
+| No Supported Products | Manifest has no `composeExtensions` or `staticTabs` | Add a `composeExtensions` entry with `composeExtensionType: "apiBased"` |
 
 ## Source-Driven Search And Agent Provisioning
 
@@ -351,13 +357,48 @@ Adapting the same agent for other platforms:
 3. Mirror the same hostname allowlist policy used in Teams packages.
 4. Treat APIM as the place for auth, policy, throttling, subscriptions, and backend rewrites so each client package stays thin.
 
-## Testing
+## Sample Prompts and Testing
 
-Run sample prompts against a deployed API:
+Both agents use only `azure_ai_search` as their grounding tool — no web search is allowed. Each agent queries its dedicated index on `aisearch-poc-myaacoub`:
+
+| Agent | Search Index | Documents |
+|-------|-------------|-----------|
+| Tax-PDF-Forms-Agent | `tax-pdf-forms-index` | 388 |
+| Eng-Design-PPT-Agent | `eng-design-ppt-index` | 100 |
+
+### Tax PDF Forms Agent
+
+| Prompt | Expected behavior |
+|--------|-------------------|
+| Summarize the renewal requirements for the Indiana tax exemption certificate. | Describes Form ST-105 and its validity period |
+| What does the Maine nonprofit certificate say about filing requirements? | References Section 501(c)(3) requirements and authorized official signatures |
+| Which fields require notarization in the Michigan exemption form? | Cites specific notarization fields from the Michigan form |
+| What documentation is required for a West Virginia resale certificate? | Lists required documentation for West Virginia resale |
+| What deadline is listed for the Alabama property tax exemption form? | Identifies deadline from the Alabama exemption form |
+
+### Engineering Design PPT Agent
+
+| Prompt | Expected behavior |
+|--------|-------------------|
+| Summarize the system architecture described in the engineering design deck. | Describes frontend, backend, monitoring, and control components |
+| What trade-offs are mentioned for the preferred design option? | Lists environmental, traffic, property, and access trade-offs |
+| List any milestone dates or next steps called out in the presentations. | Extracts milestone dates and action items |
+| What architecture decisions are described in the engineering design presentations? | Summarizes key architecture choices |
+| Which risks or action items were called out in the design review decks? | Identifies risk items from design reviews |
+
+### Running tests
+
+Run the automated smoke tests via APIM:
 
 ```powershell
 $env:APP_API_BASE_URL = "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api"
 ./scripts/test-sample-prompts.ps1
+```
+
+Or run all prompts interactively during local development:
+
+```powershell
+./scripts/deploy.ps1 -SkipTerraform -SkipApim -SkipPackage
 ```
 
 ## Terraform Notes

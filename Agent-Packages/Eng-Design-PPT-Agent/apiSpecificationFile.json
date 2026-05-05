@@ -1,0 +1,65 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Engineering Design PPT Agent",
+    "version": "1.0.0",
+    "description": "Chat with the Engineering Design PPT agent via APIM"
+  },
+  "servers": [
+    {
+      "url": "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api"
+    }
+  ],
+  "paths": {
+    "/chat": {
+      "post": {
+        "operationId": "chatWithAgent",
+        "summary": "Send a message to the Engineering Design PPT agent",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["prompt"],
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "The user's question about engineering design presentations"
+                  },
+                  "use_case": {
+                    "type": "string",
+                    "default": "eng_design_ppt",
+                    "enum": ["eng_design_ppt"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Agent response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "prompt": { "type": "string" },
+                    "response": { "type": "string" },
+                    "use_case": { "type": "string" },
+                    "duration_ms": { "type": "integer" },
+                    "sources": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

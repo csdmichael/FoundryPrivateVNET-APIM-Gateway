@@ -176,4 +176,17 @@ foreach ($import in $imports) {
 }
 
 $ErrorActionPreference = $prevErrorPref
+
+# Verify critical resources were imported
+$finalState = @(terraform state list 2>$null)
+$requiredAddresses = @(
+    'azurerm_virtual_network.main',
+    'azurerm_subnet.private_endpoints'
+)
+foreach ($required in $requiredAddresses) {
+    if ($finalState -notcontains $required) {
+        throw "Critical resource not in state after import: $required. Check import script output above."
+    }
+}
+
 exit 0
