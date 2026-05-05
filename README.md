@@ -67,7 +67,19 @@ Main workflow:
 ./scripts/deploy.ps1
 ```
 
-That script runs Terraform init, validate, plan, and apply, then provisions the retained Search indexes and Foundry agents from the source-controlled definitions in `csdmichael/AI-Search-Blob-Storage`, configures APIM, generates Teams packages, and runs sample prompt tests.
+That script runs Terraform validate plus a direct apply by default, then provisions the retained Search indexes and Foundry agents from the source-controlled definitions in `csdmichael/AI-Search-Blob-Storage`, configures APIM, generates Teams packages, and runs sample prompt tests.
+
+For faster iterative deployments, skip steps you are not changing:
+
+```powershell
+./scripts/deploy.ps1 -SkipTests -SkipPackage
+```
+
+If you want the slower two-step Terraform flow with a saved plan file, use:
+
+```powershell
+./scripts/deploy.ps1 -DetailedPlan
+```
 
 ## GitHub Actions Setup
 
