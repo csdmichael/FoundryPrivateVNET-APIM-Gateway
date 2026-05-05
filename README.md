@@ -11,7 +11,17 @@ The main design goal is to place APIM in front of Foundry so gateway concerns ar
 - apply APIM import, routing, product, policy, and subscription controls in one place
 - let the backend call APIM-managed routes instead of calling Foundry directly
 
-The architecture diagram is in [docs/architecture.png](/c:/Projects/Foundry/FoundryPrivateVNET-APIM-Gateway/docs/architecture.png).
+The architecture diagram is in [docs/architecture.png](docs/architecture.png).
+
+## Live URLs
+
+| Service | URL |
+|---------|-----|
+| UI | https://ai-search-agent-ui.azurewebsites.net |
+| API | https://ai-search-agent-api.azurewebsites.net/api |
+| API Health | https://ai-search-agent-api.azurewebsites.net/api/health |
+| APIM Gateway | https://apim-poc-my.azure-api.net |
+| APIM API Surface | https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api |
 
 ## Solution Overview
 
@@ -27,10 +37,10 @@ The deployed topology is:
 ## Included Assets
 
 - Terraform for VNet, subnets, private endpoints, private DNS, shared App Service Plan, App Services, identities, and diagnostics
-- APIM import spec in [openapi/foundry-privatevnet-app.openapi.json](/c:/Projects/Foundry/FoundryPrivateVNET-APIM-Gateway/openapi/foundry-privatevnet-app.openapi.json)
+- APIM import spec in [openapi/foundry-privatevnet-app.openapi.json](openapi/foundry-privatevnet-app.openapi.json)
 - PowerShell automation for deployment, APIM configuration, Search asset cloning, Foundry agent cloning, Teams packaging, and prompt smoke tests
 - Teams packages for the two retained agents
-- best-practices guidance in [docs/best-practices.md](/c:/Projects/Foundry/FoundryPrivateVNET-APIM-Gateway/docs/best-practices.md)
+- best-practices guidance in [docs/best-practices.md](docs/best-practices.md)
 
 ## Use Cases
 
@@ -99,7 +109,7 @@ Before publishing to Teams, replace manifest placeholders so the package points 
 Run sample prompts against a deployed API:
 
 ```powershell
-$env:APP_API_BASE_URL = "https://<your-api-host>/api"
+$env:APP_API_BASE_URL = "https://ai-search-agent-api.azurewebsites.net/api"
 ./scripts/test-sample-prompts.ps1
 ```
 
@@ -114,4 +124,4 @@ The Terraform implementation follows the agreed constraints:
 - diagnostics routed to Log Analytics
 - existing APIM, Foundry, and Search resources are referenced and configured rather than re-created wholesale
 
-Validate region, SKU, and existing resource assumptions in [main.tfvars.json](/c:/Projects/Foundry/FoundryPrivateVNET-APIM-Gateway/main.tfvars.json) before running apply in a different subscription or environment.
+Validate region, SKU, and existing resource assumptions in [main.tfvars.json](main.tfvars.json) before running apply in a different subscription or environment.
