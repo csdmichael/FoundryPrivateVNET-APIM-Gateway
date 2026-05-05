@@ -359,6 +359,7 @@ resource "azurerm_linux_web_app" "ui" {
   site_config {
     always_on  = true
     ftps_state = "Disabled"
+    app_command_line = "pm2 serve /home/site/wwwroot 8080 --no-daemon --spa"
 
     application_stack {
       node_version = "20-lts"

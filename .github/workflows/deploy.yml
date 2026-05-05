@@ -95,7 +95,7 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ secrets.UI_WEBAPP_NAME }}
-          package: ui
+          package: ui/www
 
   post-deploy:
     needs: [build-and-deploy-api, build-and-deploy-ui]

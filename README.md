@@ -11,7 +11,7 @@ The main design goal is to place APIM in front of Foundry so gateway concerns ar
 - apply APIM import, routing, product, policy, and subscription controls in one place
 - let the backend call APIM-managed routes instead of calling Foundry directly
 
-The architecture diagram is in [docs/architecture.png](docs/architecture.png).
+![Architecture](docs/architecture.png)
 
 ## Live URLs
 
@@ -69,6 +69,59 @@ Main workflow:
 
 That script runs Terraform init, validate, plan, and apply, then executes Search cloning, Foundry agent cloning, APIM configuration, Teams package generation, and sample prompt tests.
 
+## GitHub Actions Setup
+
+The GitHub Actions deployment path is already wired for OpenID Connect with a user-assigned managed identity, so no client secret is required.
+
+Provisioned Azure identity:
+
+- identity name: `gha-foundry-privatevnet-oidc`
+- client id: `b01a1a97-faef-4d58-8a9a-764d0b2697ec`
+- tenant id: `b158173c-91f6-4f99-b5e9-aa9bcb463863`
+- subscription id: `86b37969-9445-49cf-b03f-d8866235171c`
+
+Federated credentials configured on that identity:
+
+- `repo:csdmichael/FoundryPrivateVNET-APIM-Gateway:ref:refs/heads/main`
+- `repo:csdmichael/FoundryPrivateVNET-APIM-Gateway:environment:dev`
+- `repo:csdmichael/FoundryPrivateVNET-APIM-Gateway:environment:prod`
+
+Azure RBAC granted to that identity:
+
+- `Contributor` on resource group `ai-myaacoub`
+- `Azure AI Developer` on `foundryprivatevnet`
+- `Azure AI Developer` on `001-ai-poc`
+
+Repository secrets configured in `csdmichael/FoundryPrivateVNET-APIM-Gateway`:
+
+| Secret | Value |
+|--------|-------|
+| `AZURE_CLIENT_ID` | `b01a1a97-faef-4d58-8a9a-764d0b2697ec` |
+| `AZURE_TENANT_ID` | `b158173c-91f6-4f99-b5e9-aa9bcb463863` |
+| `AZURE_SUBSCRIPTION_ID` | `86b37969-9445-49cf-b03f-d8866235171c` |
+| `API_WEBAPP_NAME` | `foundry-privatevnet-api` |
+| `UI_WEBAPP_NAME` | `foundry-privatevnet-ui` |
+| `APP_API_BASE_URL` | `https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api` |
+
+GitHub environments expected by the workflow:
+
+- `dev`
+- `prod`
+
+Recommended operator flow:
+
+1. Push to `main` or run the `deploy` workflow manually from GitHub Actions.
+2. Let the `terraform` job finish before checking the app deployments.
+3. Validate `https://foundry-privatevnet-api.azurewebsites.net/api/health`.
+4. Validate `https://foundry-privatevnet-ui.azurewebsites.net`.
+5. Validate the APIM gateway path `https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api`.
+
+Notes:
+
+- The `terraform` job uses GitHub environments, which is why the managed identity has environment-scoped federated credentials for `dev` and `prod` in addition to the branch-scoped credential for `main`.
+- The UI deployment job publishes the Angular build output from `ui/www`, and the App Service is configured to serve that static bundle through `pm2`.
+- The sample prompt smoke test runs through APIM, not directly against the backend App Service.
+
 ## APIM Configuration
 
 The backend OpenAPI surface is imported into APIM and then bound to the deployed API backend.
@@ -104,12 +157,61 @@ Generated packages:
 
 Before publishing to Teams, replace manifest placeholders so the package points at your APIM hostname and keep `validDomains` aligned to that gateway host.
 
+## Demo Script
+
+Use this sequence for a live walkthrough after the GitHub Actions deployment completes:
+
+1. Open the UI at `https://foundry-privatevnet-ui.azurewebsites.net` and show the two retained use cases.
+2. Open the API health endpoint at `https://foundry-privatevnet-api.azurewebsites.net/api/health`.
+3. Open the APIM surface at `https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api/health` to show the gateway hop.
+4. Run the packaged smoke tests:
+
+```powershell
+$env:APP_API_BASE_URL = "https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api"
+./scripts/test-sample-prompts.ps1
+```
+
+5. Use prompts from [Prompts.txt](Prompts.txt) to demo both retained agents.
+6. Show the generated Teams packages under `Agent-Packages/`.
+
+## Packaging Agents For Teams And Other Clients
+
+This repo keeps APIM as the only public ingress. Keep that pattern when you publish the agents to Teams or any other client shell.
+
+Best practices:
+
+- Route every client-facing manifest, shortcut, or launcher to APIM, not directly to Foundry or the backend App Service.
+- Keep `validDomains`, privacy URLs, terms URLs, and any web endpoint metadata aligned to the APIM hostname.
+- Keep agent-specific routes stable in APIM and version them there instead of hardcoding backend URLs into client packages.
+- Repackage the client manifests after each APIM hostname or path change.
+- Prefer one package per user-facing agent so permissions, icons, names, and rollout can be managed independently.
+
+Teams packaging steps:
+
+1. Update the manifest in `Agent-Packages/<AgentName>/manifest.json`.
+2. Keep `developer.websiteUrl`, `developer.privacyUrl`, `developer.termsOfUseUrl`, and `validDomains` set to `https://apim-poc-my.azure-api.net`.
+3. If you add bot, tab, message extension, or Copilot endpoints later, point those URLs to the APIM route for that agent rather than to `azurewebsites.net`.
+4. Rebuild the package with:
+
+```powershell
+./scripts/package-teams-agents.ps1
+```
+
+5. Upload the resulting zip from `Agent-Packages/<AgentName>/<AgentName>.zip` into Teams admin center, the Teams developer portal, or your target distribution workflow.
+
+Adapting the same agent for other platforms:
+
+1. Keep the manifest or app configuration client-specific, but keep the backend route APIM-specific.
+2. Expose only the APIM route that corresponds to the intended agent, for example `https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api` plus the agent path managed by APIM.
+3. Mirror the same hostname allowlist policy used in Teams packages.
+4. Treat APIM as the place for auth, policy, throttling, subscriptions, and backend rewrites so each client package stays thin.
+
 ## Testing
 
 Run sample prompts against a deployed API:
 
 ```powershell
-$env:APP_API_BASE_URL = "https://ai-search-agent-api.azurewebsites.net/api"
+$env:APP_API_BASE_URL = "https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api"
 ./scripts/test-sample-prompts.ps1
 ```
 
