@@ -22,8 +22,14 @@
     "color": "color.png"
   },
   "accentColor": "#0F6CBD",
-  "bots": [],
-  "composeExtensions": [],
+  "staticTabs": [
+    {
+      "entityId": "eng-design-ppt",
+      "name": "Eng Design PPT",
+      "contentUrl": "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api",
+      "scopes": ["personal"]
+    }
+  ],
   "permissions": ["identity", "messageTeamMembers"],
   "validDomains": ["ai-gateway-apim-poc-my.azure-api.net"]
 }

@@ -227,9 +227,19 @@ Each `manifest.json` follows the [Teams manifest schema v1.19](https://developer
 | `developer.websiteUrl` | APIM gateway base URL | `https://ai-gateway-apim-poc-my.azure-api.net` |
 | `developer.privacyUrl` | Privacy policy URL | `https://ai-gateway-apim-poc-my.azure-api.net/privacy` |
 | `developer.termsOfUseUrl` | Terms of use URL | `https://ai-gateway-apim-poc-my.azure-api.net/terms` |
+| `staticTabs[].contentUrl` | Personal tab content URL | `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api` |
 | `validDomains` | Allowed domain for API calls | `["ai-gateway-apim-poc-my.azure-api.net"]` |
 
-If you change the APIM service, update `websiteUrl`, `privacyUrl`, `termsOfUseUrl`, and `validDomains` in both manifests to match the new gateway hostname.
+If you change the APIM service, update all URL fields and `validDomains` in both manifests to match the new gateway hostname.
+
+### Icon requirements
+
+Teams enforces strict icon rules:
+
+| Icon | File | Size | Rules |
+|------|------|------|-------|
+| Color | `color.png` | 192x192 px | Full color, PNG format |
+| Outline | `outline.png` | 32x32 px | White and transparent only, PNG format |
 
 ### Repackaging
 
@@ -241,15 +251,27 @@ The packaging script zips each agent folder's `manifest.json`, `color.png`, and 
 
 This runs automatically during `./scripts/deploy.ps1` and the GitHub Actions `post-deploy` job. To skip packaging during local deployment, use `-SkipPackage`.
 
-### Publishing to Microsoft Teams
+### Publishing via Teams Developer Portal
 
-1. Open the [Teams Admin Center](https://admin.teams.microsoft.com) and go to **Teams apps > Manage apps**.
-2. Click **Upload new app** and select the `.zip` file (e.g. `Agent-Packages/Tax-PDF-Forms-Agent/Tax-PDF-Forms-Agent.zip`).
-3. Review the app details and approve it for your tenant or specific users/groups.
-4. Repeat for `Eng-Design-PPT-Agent.zip`.
-5. Users can then find and install the agents from the Teams app catalog.
+The [Teams Developer Portal](https://dev.teams.microsoft.com) lets you test and publish apps without tenant admin approval:
 
-Alternatively, sideload for testing: in Teams, go to **Apps > Manage your apps > Upload a custom app** and select the `.zip`.
+1. Go to [https://dev.teams.microsoft.com](https://dev.teams.microsoft.com).
+2. Click **Apps** → **Import app**.
+3. Upload the `.zip` file (e.g. `Agent-Packages/Tax-PDF-Forms-Agent/Tax-PDF-Forms-Agent.zip`).
+4. The portal validates the manifest, icons, and schema. Fix any errors before proceeding.
+5. Click **Preview in Teams** to install the app for yourself.
+6. Repeat for `Eng-Design-PPT-Agent.zip`.
+
+This bypasses the Teams Admin Center approval flow and installs the app only for your account.
+
+### Common packaging errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `packageName` not defined | Deprecated field in manifest | Remove the `packageName` property |
+| Color icon wrong dimension | `color.png` is not 192x192 | Regenerate as 192x192 PNG |
+| Outline icon wrong format | `outline.png` is not 32x32 white+transparent | Regenerate as 32x32, white on transparent PNG |
+| No Supported Products | Manifest has no `staticTabs`, `bots`, or `composeExtensions` | Add a `staticTabs` entry with a personal scope |
 
 ## Source-Driven Search And Agent Provisioning
 
