@@ -23,6 +23,9 @@ env:
 jobs:
   terraform:
     runs-on: ubuntu-latest
+    env:
+      TF_VAR_deploy_api: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_api || false }}
+      TF_VAR_deploy_ui: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_ui || false }}
     permissions:
       id-token: write
       contents: read
@@ -50,7 +53,7 @@ jobs:
 
   build-and-deploy-api:
     needs: terraform
-    if: github.event_name != 'workflow_dispatch' || inputs.deploy_api
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_api
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -81,7 +84,7 @@ jobs:
 
   build-and-deploy-ui:
     needs: terraform
-    if: github.event_name != 'workflow_dispatch' || inputs.deploy_ui
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_ui
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -138,6 +141,9 @@ jobs:
       - name: Configure APIM
         shell: pwsh
         run: ./scripts/configure-apim.ps1
+      - name: Configure Foundry AI gateway via APIM
+        shell: pwsh
+        run: ./scripts/configure-foundry-ai-gateway.ps1
       - name: Provision private Search and agents from source repo
         shell: pwsh
         run: ./scripts/provision-source-use-cases.ps1

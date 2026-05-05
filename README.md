@@ -69,6 +69,8 @@ Main workflow:
 
 That script runs Terraform validate plus a direct apply by default, then provisions the retained Search indexes and Foundry agents from the source-controlled definitions in `csdmichael/AI-Search-Blob-Storage`, configures APIM, generates Teams packages, and runs sample prompt tests.
 
+App Service infrastructure is opt-in. Use `-DeployApi` and `-DeployUi` only when you want Terraform to manage the web apps and their shared App Service plan.
+
 For faster iterative deployments, skip steps you are not changing:
 
 ```powershell
@@ -116,7 +118,7 @@ Repository secrets configured in `csdmichael/FoundryPrivateVNET-APIM-Gateway`:
 
 GitHub environments are not required by the current workflow. The deployment runs as a single pipeline against one Terraform configuration and authenticates through the `main` branch OIDC subject.
 
-When you run the `deploy` workflow manually from GitHub Actions, `deploy_api` and `deploy_ui` inputs let you skip either app deployment. Pushes to `main` still deploy both by default.
+When you run the `deploy` workflow manually from GitHub Actions, `deploy_api` and `deploy_ui` inputs let you opt into either app deployment. Pushes to `main` now run the infrastructure and post-deploy gateway/provisioning flow without redeploying the App Services.
 
 Recommended operator flow:
 
@@ -143,6 +145,7 @@ The backend OpenAPI surface is imported into APIM and then bound to the deployed
 
 ```powershell
 ./scripts/configure-apim.ps1
+./scripts/configure-foundry-ai-gateway.ps1
 ```
 
 The production UI is configured to call:

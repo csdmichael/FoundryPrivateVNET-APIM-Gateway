@@ -6,6 +6,8 @@ $subscriptionId = $tfvars.subscription_id
 $resourceGroup = $tfvars.resource_group_name
 $locationSlug = ($tfvars.location -replace '\s+', '').ToLowerInvariant()
 $namePrefix = $tfvars.name_prefix
+$deployApi = if ($null -ne $env:TF_VAR_deploy_api -and $env:TF_VAR_deploy_api) { [System.Convert]::ToBoolean($env:TF_VAR_deploy_api) } elseif ($null -ne $tfvars.deploy_api) { [bool]$tfvars.deploy_api } else { $false }
+$deployUi = if ($null -ne $env:TF_VAR_deploy_ui -and $env:TF_VAR_deploy_ui) { [System.Convert]::ToBoolean($env:TF_VAR_deploy_ui) } elseif ($null -ne $tfvars.deploy_ui) { [bool]$tfvars.deploy_ui } else { $false }
 $apiWebAppName = if ($null -ne $tfvars.api_web_app_name -and $tfvars.api_web_app_name) { $tfvars.api_web_app_name } else { "lwapp-${namePrefix}api-$locationSlug" }
 $uiWebAppName = if ($null -ne $tfvars.ui_web_app_name -and $tfvars.ui_web_app_name) { $tfvars.ui_web_app_name } else { "lwapp-${namePrefix}ui-$locationSlug" }
 
@@ -36,10 +38,22 @@ function Get-PrivateEndpointIdByTargetResource {
 $foundryPrivateEndpointId = Get-PrivateEndpointIdByTargetResource -TargetResourceId $tfvars.foundry_account_resource_id
 $searchPrivateEndpointId = Get-PrivateEndpointIdByTargetResource -TargetResourceId $searchServiceResourceId
 
+function Remove-StateAddresses {
+    param(
+        [string[]]$Addresses,
+        [string[]]$TrackedAddresses
+    )
+
+    foreach ($address in $Addresses) {
+        if ($TrackedAddresses -contains $address) {
+            Write-Host "Removing from state: $address"
+            & terraform state rm $address | Out-Null
+        }
+    }
+}
+
 $imports = @(
     @{ Address = 'azurerm_log_analytics_workspace.main'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.OperationalInsights/workspaces/$logAnalyticsName" },
-    @{ Address = 'azurerm_user_assigned_identity.api'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.ManagedIdentity/userAssignedIdentities/$apiIdentityName" },
-    @{ Address = 'azurerm_user_assigned_identity.ui'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.ManagedIdentity/userAssignedIdentities/$uiIdentityName" },
     @{ Address = 'azurerm_virtual_network.main'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Network/virtualNetworks/$vnetName" },
     @{ Address = 'azurerm_subnet.appsvc_integration'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Network/virtualNetworks/$vnetName/subnets/appsvc-integration" },
     @{ Address = 'azurerm_subnet.private_endpoints'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Network/virtualNetworks/$vnetName/subnets/private-endpoints" },
@@ -48,12 +62,52 @@ $imports = @(
     @{ Address = 'azurerm_private_dns_zone_virtual_network_link.foundry'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Network/privateDnsZones/privatelink.services.ai.azure.com/virtualNetworkLinks/foundry-link" },
     @{ Address = 'azurerm_private_dns_zone_virtual_network_link.search'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Network/privateDnsZones/privatelink.search.windows.net/virtualNetworkLinks/search-link" },
     @{ Address = 'azurerm_private_endpoint.foundry'; Id = $foundryPrivateEndpointId },
-    @{ Address = 'azurerm_private_endpoint.search'; Id = $searchPrivateEndpointId },
-    @{ Address = 'azurerm_linux_web_app.api'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/$apiWebAppName" },
-    @{ Address = 'azurerm_linux_web_app.ui'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/$uiWebAppName" },
-    @{ Address = 'azurerm_monitor_diagnostic_setting.api'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/$apiWebAppName|api-to-law" },
-    @{ Address = 'azurerm_monitor_diagnostic_setting.ui'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/$uiWebAppName|ui-to-law" }
+    @{ Address = 'azurerm_private_endpoint.search'; Id = $searchPrivateEndpointId }
 )
+
+if ($deployApi) {
+    $imports += @(
+        @{ Address = 'azurerm_user_assigned_identity.api[0]'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.ManagedIdentity/userAssignedIdentities/$apiIdentityName" },
+        @{ Address = 'azurerm_linux_web_app.api[0]'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/$apiWebAppName" },
+        @{ Address = 'azurerm_monitor_diagnostic_setting.api[0]'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/$apiWebAppName|api-to-law" }
+    )
+}
+
+if ($deployUi) {
+    $imports += @(
+        @{ Address = 'azurerm_user_assigned_identity.ui[0]'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.ManagedIdentity/userAssignedIdentities/$uiIdentityName" },
+        @{ Address = 'azurerm_linux_web_app.ui[0]'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/$uiWebAppName" },
+        @{ Address = 'azurerm_monitor_diagnostic_setting.ui[0]'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/$uiWebAppName|ui-to-law" }
+    )
+}
+
+$trackedAddresses = @(terraform state list 2>$null)
+
+if (-not $deployApi) {
+    Remove-StateAddresses -Addresses @(
+        'azurerm_monitor_diagnostic_setting.api',
+        'azurerm_monitor_diagnostic_setting.api[0]',
+        'azurerm_app_service_virtual_network_swift_connection.api',
+        'azurerm_app_service_virtual_network_swift_connection.api[0]',
+        'azurerm_linux_web_app.api',
+        'azurerm_linux_web_app.api[0]',
+        'azurerm_user_assigned_identity.api',
+        'azurerm_user_assigned_identity.api[0]'
+    ) -TrackedAddresses $trackedAddresses
+}
+
+if (-not $deployUi) {
+    Remove-StateAddresses -Addresses @(
+        'azurerm_monitor_diagnostic_setting.ui',
+        'azurerm_monitor_diagnostic_setting.ui[0]',
+        'azurerm_app_service_virtual_network_swift_connection.ui',
+        'azurerm_app_service_virtual_network_swift_connection.ui[0]',
+        'azurerm_linux_web_app.ui',
+        'azurerm_linux_web_app.ui[0]',
+        'azurerm_user_assigned_identity.ui',
+        'azurerm_user_assigned_identity.ui[0]'
+    ) -TrackedAddresses $trackedAddresses
+}
 
 $trackedAddresses = @(terraform state list 2>$null)
 

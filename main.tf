@@ -80,6 +80,16 @@ variable "ui_web_app_name" {
   default = null
 }
 
+variable "deploy_api" {
+  type    = bool
+  default = false
+}
+
+variable "deploy_ui" {
+  type    = bool
+  default = false
+}
+
 variable "tags" {
   type    = map(string)
   default = {
@@ -110,15 +120,17 @@ data "azurerm_cognitive_account" "foundry" {
 }
 
 data "azurerm_service_plan" "existing" {
-  count               = var.existing_app_service_plan_name != null ? 1 : 0
+  count               = (var.deploy_api || var.deploy_ui) && var.existing_app_service_plan_name != null ? 1 : 0
   name                = var.existing_app_service_plan_name
   resource_group_name = data.azurerm_resource_group.target.name
 }
 
 locals {
+  deploy_web_apps = var.deploy_api || var.deploy_ui
+  use_existing_app_service_plan = local.deploy_web_apps && var.existing_app_service_plan_name != null
   location_slug = replace(lower(var.location), " ", "")
-  service_plan_id = var.existing_app_service_plan_name != null ? data.azurerm_service_plan.existing[0].id : azurerm_service_plan.main[0].id
-  web_app_location = var.existing_app_service_plan_name != null ? data.azurerm_service_plan.existing[0].location : var.location
+  service_plan_id = local.deploy_web_apps ? (local.use_existing_app_service_plan ? data.azurerm_service_plan.existing[0].id : azurerm_service_plan.main[0].id) : null
+  web_app_location = local.deploy_web_apps ? (local.use_existing_app_service_plan ? data.azurerm_service_plan.existing[0].location : var.location) : null
   api_web_app_name = var.api_web_app_name != null ? var.api_web_app_name : azurecaf_name.api_web_app.result
   ui_web_app_name = var.ui_web_app_name != null ? var.ui_web_app_name : azurecaf_name.ui_web_app.result
 }
@@ -187,6 +199,7 @@ resource "azurerm_log_analytics_workspace" "main" {
 }
 
 resource "azurerm_user_assigned_identity" "api" {
+  count               = var.deploy_api ? 1 : 0
   name                = azurecaf_name.api_identity.result
   location            = var.location
   resource_group_name = data.azurerm_resource_group.target.name
@@ -194,6 +207,7 @@ resource "azurerm_user_assigned_identity" "api" {
 }
 
 resource "azurerm_user_assigned_identity" "ui" {
+  count               = var.deploy_ui ? 1 : 0
   name                = azurecaf_name.ui_identity.result
   location            = var.location
   resource_group_name = data.azurerm_resource_group.target.name
@@ -306,7 +320,7 @@ resource "azurerm_private_endpoint" "search" {
 }
 
 resource "azurerm_service_plan" "main" {
-  count               = var.existing_app_service_plan_name == null ? 1 : 0
+  count               = local.deploy_web_apps && var.existing_app_service_plan_name == null ? 1 : 0
   name                = azurecaf_name.app_service_plan.result
   resource_group_name = data.azurerm_resource_group.target.name
   location            = var.location
@@ -316,6 +330,7 @@ resource "azurerm_service_plan" "main" {
 }
 
 resource "azurerm_linux_web_app" "api" {
+  count               = var.deploy_api ? 1 : 0
   name                = local.api_web_app_name
   resource_group_name = data.azurerm_resource_group.target.name
   location            = local.web_app_location
@@ -325,14 +340,14 @@ resource "azurerm_linux_web_app" "api" {
 
   lifecycle {
     precondition {
-      condition     = var.existing_app_service_plan_name == null || lower(data.azurerm_service_plan.existing[0].location) == lower(var.location)
+      condition     = !local.use_existing_app_service_plan || lower(data.azurerm_service_plan.existing[0].location) == lower(var.location)
       error_message = "The existing App Service plan must be in the same region as the deployment VNet and web apps. Set existing_app_service_plan_name to null to create a new plan in ${var.location}, or point it to an App Service plan in ${var.location}."
     }
   }
 
   identity {
     type         = "UserAssigned"
-    identity_ids = [azurerm_user_assigned_identity.api.id]
+    identity_ids = [azurerm_user_assigned_identity.api[0].id]
   }
 
   app_settings = {
@@ -357,6 +372,7 @@ resource "azurerm_linux_web_app" "api" {
 }
 
 resource "azurerm_linux_web_app" "ui" {
+  count               = var.deploy_ui ? 1 : 0
   name                = local.ui_web_app_name
   resource_group_name = data.azurerm_resource_group.target.name
   location            = local.web_app_location
@@ -364,9 +380,16 @@ resource "azurerm_linux_web_app" "ui" {
   https_only          = true
   tags                = var.tags
 
+  lifecycle {
+    precondition {
+      condition     = !local.use_existing_app_service_plan || lower(data.azurerm_service_plan.existing[0].location) == lower(var.location)
+      error_message = "The existing App Service plan must be in the same region as the deployment VNet and web apps. Set existing_app_service_plan_name to null to create a new plan in ${var.location}, or point it to an App Service plan in ${var.location}."
+    }
+  }
+
   identity {
     type         = "UserAssigned"
-    identity_ids = [azurerm_user_assigned_identity.ui.id]
+    identity_ids = [azurerm_user_assigned_identity.ui[0].id]
   }
 
   app_settings = {
@@ -388,18 +411,21 @@ resource "azurerm_linux_web_app" "ui" {
 }
 
 resource "azurerm_app_service_virtual_network_swift_connection" "api" {
-  app_service_id = azurerm_linux_web_app.api.id
+  count          = var.deploy_api ? 1 : 0
+  app_service_id = azurerm_linux_web_app.api[0].id
   subnet_id      = azurerm_subnet.appsvc_integration.id
 }
 
 resource "azurerm_app_service_virtual_network_swift_connection" "ui" {
-  app_service_id = azurerm_linux_web_app.ui.id
+  count          = var.deploy_ui ? 1 : 0
+  app_service_id = azurerm_linux_web_app.ui[0].id
   subnet_id      = azurerm_subnet.appsvc_integration.id
 }
 
 resource "azurerm_monitor_diagnostic_setting" "api" {
+  count                      = var.deploy_api ? 1 : 0
   name                       = "api-to-law"
-  target_resource_id         = azurerm_linux_web_app.api.id
+  target_resource_id         = azurerm_linux_web_app.api[0].id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
 
   enabled_log {
@@ -416,8 +442,9 @@ resource "azurerm_monitor_diagnostic_setting" "api" {
 }
 
 resource "azurerm_monitor_diagnostic_setting" "ui" {
+  count                      = var.deploy_ui ? 1 : 0
   name                       = "ui-to-law"
-  target_resource_id         = azurerm_linux_web_app.ui.id
+  target_resource_id         = azurerm_linux_web_app.ui[0].id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
 
   enabled_log {

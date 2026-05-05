@@ -7,19 +7,19 @@ output "virtual_network_name" {
 }
 
 output "api_web_app_name" {
-  value = azurerm_linux_web_app.api.name
+  value = try(azurerm_linux_web_app.api[0].name, null)
 }
 
 output "ui_web_app_name" {
-  value = azurerm_linux_web_app.ui.name
+  value = try(azurerm_linux_web_app.ui[0].name, null)
 }
 
 output "api_url" {
-  value = "https://${azurerm_linux_web_app.api.default_hostname}"
+  value = try("https://${azurerm_linux_web_app.api[0].default_hostname}", null)
 }
 
 output "ui_url" {
-  value = "https://${azurerm_linux_web_app.ui.default_hostname}"
+  value = try("https://${azurerm_linux_web_app.ui[0].default_hostname}", null)
 }
 
 output "log_analytics_workspace_id" {
