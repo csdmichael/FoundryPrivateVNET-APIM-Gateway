@@ -17,26 +17,25 @@ $apiIdentityName = "msi-${namePrefix}api-$locationSlug"
 $uiIdentityName = "msi-${namePrefix}ui-$locationSlug"
 
 $searchServiceResourceId = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Search/searchServices/$($tfvars.search_service_name)"
-$privateEndpoints = @(az network private-endpoint list --resource-group $resourceGroup -o json | ConvertFrom-Json)
 
-function Get-PrivateEndpointIdByTargetResource {
-    param(
-        [string]$TargetResourceId
-    )
+# azurecaf_name format for private endpoints: pe-{name}-{suffix}
+$foundryPeName = "pe-${namePrefix}fdry-$locationSlug"
+$searchPeName = "pe-${namePrefix}srch-$locationSlug"
 
-    foreach ($privateEndpoint in $privateEndpoints) {
-        foreach ($connection in @($privateEndpoint.privateLinkServiceConnections)) {
-            if ($connection.privateLinkServiceId -eq $TargetResourceId) {
-                return $privateEndpoint.id
-            }
-        }
-    }
+# Look up PE IDs by target resource, fall back to name
+$ErrorActionPreference = 'Continue'
 
-    return $null
+$foundryPrivateEndpointId = az network private-endpoint list --resource-group $resourceGroup --query "[?privateLinkServiceConnections[0].privateLinkServiceId=='$($tfvars.foundry_account_resource_id)'].id | [0]" -o tsv 2>$null
+if ([string]::IsNullOrWhiteSpace($foundryPrivateEndpointId)) {
+    $foundryPrivateEndpointId = az network private-endpoint show --name $foundryPeName --resource-group $resourceGroup --query id -o tsv 2>$null
 }
 
-$foundryPrivateEndpointId = Get-PrivateEndpointIdByTargetResource -TargetResourceId $tfvars.foundry_account_resource_id
-$searchPrivateEndpointId = Get-PrivateEndpointIdByTargetResource -TargetResourceId $searchServiceResourceId
+$searchPrivateEndpointId = az network private-endpoint list --resource-group $resourceGroup --query "[?privateLinkServiceConnections[0].privateLinkServiceId=='$searchServiceResourceId'].id | [0]" -o tsv 2>$null
+if ([string]::IsNullOrWhiteSpace($searchPrivateEndpointId)) {
+    $searchPrivateEndpointId = az network private-endpoint show --name $searchPeName --resource-group $resourceGroup --query id -o tsv 2>$null
+}
+
+$ErrorActionPreference = 'Stop'
 
 function Remove-StateAddresses {
     param(
@@ -130,6 +129,9 @@ if (-not $deployUi) {
 
 $trackedAddresses = @(terraform state list 2>$null)
 
+$prevErrorPref = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+
 foreach ($import in $imports) {
     $address = $import.Address
     $resourceId = $import.Id
@@ -138,7 +140,7 @@ foreach ($import in $imports) {
     if ([string]::IsNullOrWhiteSpace($resourceId)) {
         if ($isTracked) {
             Write-Host "Missing in Azure, removing stale state: $address"
-            & terraform state rm $address | Out-Null
+            & terraform state rm $address 2>$null | Out-Null
         }
 
         Write-Host "No resource ID resolved, skipping: $address"
@@ -153,23 +155,25 @@ foreach ($import in $imports) {
         }
 
         Write-Host "State drift detected, replacing tracked resource: $address"
-        & terraform state rm $address | Out-Null
+        & terraform state rm $address 2>$null | Out-Null
     }
 
     Write-Host "Importing $address"
-    Write-Host "Importing $address"
     $importOutput = & terraform import '-var-file=main.tfvars.json' $address $resourceId 2>&1
-    if ($LASTEXITCODE -ne 0) {
+    $importExitCode = $LASTEXITCODE
+    if ($importExitCode -ne 0) {
         $outputText = $importOutput | Out-String
         if ($outputText -match 'Cannot import non-existent|not found|does not exist') {
             Write-Host "Not present in Azure, skipping: $address"
             $global:LASTEXITCODE = 0
         }
         else {
+            $ErrorActionPreference = $prevErrorPref
             Write-Host $outputText
             throw "terraform import failed for $address"
         }
     }
 }
 
+$ErrorActionPreference = $prevErrorPref
 exit 0

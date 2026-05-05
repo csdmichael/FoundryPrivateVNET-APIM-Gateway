@@ -248,6 +248,10 @@ resource "azurerm_subnet" "private_endpoints" {
   service_endpoints                         = ["Microsoft.CognitiveServices"]
   private_endpoint_network_policies         = "Disabled"
   private_link_service_network_policies_enabled = false
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "azurerm_private_dns_zone" "foundry" {
