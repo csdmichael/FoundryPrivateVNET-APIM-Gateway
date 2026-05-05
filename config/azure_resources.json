@@ -1,0 +1,50 @@
+{
+  "subscription_id": "86b37969-9445-49cf-b03f-d8866235171c",
+  "resource_group": "ai-myaacoub",
+  "location": "eastus",
+  "apim": {
+    "resource_id": "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.ApiManagement/service/apim-poc-my",
+    "gateway_url": "https://apim-poc-my.azure-api.net",
+    "product_name": "foundry-privatevnet-product",
+    "backend_api_name": "foundry-privatevnet-app-api",
+    "foundry_api_name": "foundry-privatevnet-agent-gateway"
+  },
+  "search": {
+    "target_service_name": "aisearch-poc-myaacoub",
+    "target_resource_id": "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.Search/searchServices/aisearch-poc-myaacoub",
+    "source_service_name": "ai-search-my",
+    "source_resource_id": "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.Search/searchServices/ai-search-my"
+  },
+  "foundry": {
+    "account_name": "foundryprivatevnet",
+    "account_resource_id": "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.CognitiveServices/accounts/foundryprivatevnet",
+    "project_endpoint": "https://foundryprivatevnet.services.ai.azure.com/api/projects/proj-default",
+    "source_project_endpoint": "https://001-ai-poc.services.ai.azure.com/api/projects/001-ai-proj"
+  },
+  "cosmosdb": {
+    "database_name": "taxforms",
+    "container_name": "documents"
+  },
+  "use_cases": {
+    "tax_pdf_forms": {
+      "label": "Tax PDF Forms",
+      "agent_name": "Tax-PDF-Forms-Agent",
+      "apim_agent_path": "/foundry-privatevnet/agents/tax-pdf-forms/chat",
+      "search_assets": {
+        "data_source": "tax-pdf-forms-datasource",
+        "index": "tax-pdf-forms-index",
+        "indexer": "tax-pdf-forms-indexer"
+      }
+    },
+    "eng_design_ppt": {
+      "label": "Engineering Design PPT",
+      "agent_name": "Eng-Design-PPT-Agent",
+      "apim_agent_path": "/foundry-privatevnet/agents/eng-design-ppt/chat",
+      "search_assets": {
+        "data_source": "eng-design-ppt-datasource",
+        "index": "eng-design-ppt-index",
+        "indexer": "eng-design-ppt-indexer"
+      }
+    }
+  }
+}

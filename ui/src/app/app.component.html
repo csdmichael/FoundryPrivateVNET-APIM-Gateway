@@ -1,0 +1,70 @@
+<ion-app>
+  <ion-split-pane contentId="main-content" when="md">
+    <!-- Side menu -->
+    <ion-menu contentId="main-content" type="overlay">
+      <ion-header>
+        <ion-toolbar color="primary">
+          <ion-buttons slot="start">
+            <img src="https://img.icons8.com/color/28/microsoft.png" alt="Microsoft" style="margin-left:8px">
+          </ion-buttons>
+          <ion-title>AI Search POC</ion-title>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content>
+        <ion-list-header>Navigation</ion-list-header>
+        <ion-list lines="none">
+          <ion-menu-toggle auto-hide="false">
+            <ion-item routerLink="/chat" routerLinkActive="selected-nav" routerDirection="root" button detail="false">
+              <ion-icon name="chatbubble-outline" slot="start"></ion-icon>
+              <ion-label>Chat</ion-label>
+            </ion-item>
+          </ion-menu-toggle>
+          <ion-menu-toggle auto-hide="false">
+            <ion-item routerLink="/prompts" routerLinkActive="selected-nav" routerDirection="root" button detail="false">
+              <ion-icon name="list-outline" slot="start"></ion-icon>
+              <ion-label>Sample Prompts</ion-label>
+            </ion-item>
+          </ion-menu-toggle>
+          <ion-menu-toggle auto-hide="false">
+            <ion-item routerLink="/documents" routerLinkActive="selected-nav" routerDirection="root" button detail="false">
+              <ion-icon name="folder-outline" slot="start"></ion-icon>
+              <ion-label>Documents</ion-label>
+            </ion-item>
+          </ion-menu-toggle>
+        </ion-list>
+
+        <!-- Footer in menu -->
+        <div class="menu-footer">
+          <p>&copy; 2026 Michael Yaacoub</p>
+          <p>Sr Solution Engineer, Microsoft</p>
+          <p>
+            <a href="https://www.github.com/csdmichael" target="_blank" rel="noopener">GitHub</a>
+            &middot;
+            <a href="https://www.linkedin.com/in/michael-yaacoub-7a46436/" target="_blank" rel="noopener">LinkedIn</a>
+          </p>
+        </div>
+      </ion-content>
+    </ion-menu>
+
+    <!-- Main content -->
+    <div id="main-content" class="ion-page">
+      <ion-header>
+        <ion-toolbar color="primary">
+          <ion-buttons slot="start">
+            <ion-menu-button></ion-menu-button>
+          </ion-buttons>
+          <ion-title>AI Search POC</ion-title>
+          <ion-select slot="end" class="uc-select"
+                      [value]="ucService.activeKey"
+                      (ionChange)="onUseCaseChange($any($event).detail.value)"
+                      interface="popover">
+            <ion-select-option *ngFor="let uc of ucService.useCases" [value]="uc.key">
+              {{ uc.label }}
+            </ion-select-option>
+          </ion-select>
+        </ion-toolbar>
+      </ion-header>
+      <ion-router-outlet></ion-router-outlet>
+    </div>
+  </ion-split-pane>
+</ion-app>

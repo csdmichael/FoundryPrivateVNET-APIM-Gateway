@@ -1,0 +1,84 @@
+<ion-content>
+  <div class="prompts-container">
+    <!-- Select All -->
+    <ion-item lines="none" class="select-all-bar">
+      <ion-checkbox slot="start" [checked]="allSelected" (ionChange)="toggleAll($any($event).detail.checked)"></ion-checkbox>
+      <ion-label><strong>Select All</strong> ({{ selectedCount }} selected)</ion-label>
+    </ion-item>
+
+    <!-- Running indicator -->
+    <div class="running-banner" *ngIf="isRunning">
+      <ion-spinner name="crescent"></ion-spinner>
+      <span>Running {{ runTotal }} prompts sequentially&hellip;</span>
+      <ion-progress-bar [value]="runTotal > 0 ? runProgress / runTotal : 0"></ion-progress-bar>
+    </div>
+
+    <!-- Results summary -->
+    <ion-card *ngIf="batchResult" class="results-card">
+      <ion-card-header>
+        <ion-card-title>
+          Test Results
+          <ion-badge [color]="getAccuracyColor(batchResult.accuracy_pct)" class="accuracy-badge">
+            {{ batchResult.accuracy_pct }}% accuracy
+          </ion-badge>
+        </ion-card-title>
+        <ion-card-subtitle>
+          {{ batchResult.passed }} passed / {{ batchResult.failed }} failed of {{ batchResult.total }}
+        </ion-card-subtitle>
+      </ion-card-header>
+      <ion-card-content>
+        <ion-list>
+          <ion-item *ngFor="let r of batchResult.results; let i = index" [lines]="i < batchResult.results.length - 1 ? 'inset' : 'none'">
+            <ion-icon slot="start"
+                      [name]="r.passed ? 'checkmark-circle' : 'close-circle'"
+                      [color]="getResultColor(r)"></ion-icon>
+            <ion-label class="ion-text-wrap">
+              <h3>{{ r.prompt }}</h3>
+              <p class="result-response">{{ r.response | slice:0:300 }}{{ r.response.length > 300 ? '...' : '' }}</p>
+              <p class="result-meta">
+                <ion-badge color="medium">{{ r.duration_ms }}ms</ion-badge>
+                <ion-badge *ngIf="!r.passed" color="danger">{{ r.reason }}</ion-badge>
+                <ion-badge *ngFor="let src of r.sources" color="tertiary" class="src-badge citation-link" (click)="openCitation(src)">{{ src }}</ion-badge>
+              </p>
+            </ion-label>
+          </ion-item>
+        </ion-list>
+      </ion-card-content>
+    </ion-card>
+
+    <!-- Prompt categories -->
+    <div *ngFor="let cat of categories" class="category-section">
+      <ion-item-divider color="light" sticky>
+        <ion-checkbox slot="start"
+                      [checked]="isCategorySelected(cat)"
+                      (ionChange)="selectCategory(cat, $any($event).detail.checked)">
+        </ion-checkbox>
+        <ion-label>
+          <strong>{{ cat | titlecase }}</strong>
+          <ion-badge color="medium" class="count-badge">{{ prompts[cat].length }}</ion-badge>
+        </ion-label>
+      </ion-item-divider>
+
+      <ion-item *ngFor="let p of prompts[cat]" class="prompt-item">
+        <ion-checkbox slot="start" [(ngModel)]="p.selected"></ion-checkbox>
+        <ion-label class="ion-text-wrap">{{ p.text }}</ion-label>
+        <ion-button slot="end" fill="clear" size="small" (click)="copyPrompt(p.text)" title="Copy">
+          <ion-icon name="copy-outline" slot="icon-only"></ion-icon>
+        </ion-button>
+        <ion-button slot="end" fill="clear" size="small" (click)="useInChat(p.text)" title="Use in Chat" color="primary">
+          <ion-icon name="chatbubble-outline" slot="icon-only"></ion-icon>
+        </ion-button>
+      </ion-item>
+    </div>
+  </div>
+
+  <!-- Floating Run button -->
+  <ion-fab vertical="bottom" horizontal="end" slot="fixed">
+    <ion-fab-button color="success" (click)="runSelected()" [disabled]="selectedCount === 0 || isRunning">
+      <ion-icon name="play"></ion-icon>
+    </ion-fab-button>
+  </ion-fab>
+  <div class="fab-label" *ngIf="selectedCount > 0 && !isRunning">
+    Run {{ selectedCount }}
+  </div>
+</ion-content>

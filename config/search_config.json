@@ -1,0 +1,16 @@
+{
+  "use_cases": {
+    "tax_pdf_forms": {
+      "source_index": "tax-pdf-forms-index",
+      "target_index": "tax-pdf-forms-index",
+      "source_indexer": "tax-pdf-forms-indexer",
+      "target_indexer": "tax-pdf-forms-indexer"
+    },
+    "eng_design_ppt": {
+      "source_index": "eng-design-ppt-index",
+      "target_index": "eng-design-ppt-index",
+      "source_indexer": "eng-design-ppt-indexer",
+      "target_indexer": "eng-design-ppt-indexer"
+    }
+  }
+}

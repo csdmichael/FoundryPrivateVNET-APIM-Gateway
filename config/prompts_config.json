@@ -1,0 +1,38 @@
+{
+  "use_cases": {
+    "tax_pdf_forms": {
+      "keyword": [
+        {"text": "Indiana expired exemption certificate", "category": "keyword"},
+        {"text": "West Virginia resale documentation", "category": "keyword"},
+        {"text": "California 501(c)(3) eligibility", "category": "keyword"}
+      ],
+      "semantic": [
+        {"text": "What renewal process is described in the Indiana tax exemption form?", "category": "semantic"},
+        {"text": "What documentation is required for a West Virginia resale certificate?", "category": "semantic"},
+        {"text": "What deadline is listed for the Alabama property tax exemption form?", "category": "semantic"}
+      ],
+      "agent": [
+        {"text": "Summarize the renewal requirements for the Indiana tax exemption certificate.", "category": "agent"},
+        {"text": "What does the Maine nonprofit certificate say about filing requirements?", "category": "agent"},
+        {"text": "Which fields require notarization in the Michigan exemption form?", "category": "agent"}
+      ]
+    },
+    "eng_design_ppt": {
+      "keyword": [
+        {"text": "slide summary design review", "category": "keyword"},
+        {"text": "project milestone architecture", "category": "keyword"},
+        {"text": "engineering decision tradeoff", "category": "keyword"}
+      ],
+      "semantic": [
+        {"text": "What architecture decisions are described in the engineering design presentations?", "category": "semantic"},
+        {"text": "Which risks or action items were called out in the design review decks?", "category": "semantic"},
+        {"text": "What performance requirements are emphasized across the presentations?", "category": "semantic"}
+      ],
+      "agent": [
+        {"text": "Summarize the system architecture described in the engineering design deck.", "category": "agent"},
+        {"text": "What trade-offs are mentioned for the preferred design option?", "category": "agent"},
+        {"text": "List any milestone dates or next steps called out in the presentations.", "category": "agent"}
+      ]
+    }
+  }
+}

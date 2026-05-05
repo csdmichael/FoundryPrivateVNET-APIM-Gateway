@@ -1,0 +1,92 @@
+<ion-content class="chat-content" #chatContent>
+  <!-- Empty state -->
+  <div class="empty-state" *ngIf="messages.length === 0 && !isLoading">
+    <ion-icon name="chatbubbles-outline" class="empty-icon"></ion-icon>
+    <h2>How can I help you?</h2>
+    <p>Ask a question about {{ uc.active.label }}.</p>
+    <ion-button fill="clear" (click)="clearChat()" size="small" color="medium">
+      <ion-icon name="trash-outline" slot="start"></ion-icon> Clear History
+    </ion-button>
+  </div>
+
+  <!-- Messages -->
+  <div class="messages-container">
+    <div *ngFor="let msg of messages"
+         class="message-row"
+         [ngClass]="{ 'user-row': msg.role === 'user', 'assistant-row': msg.role === 'assistant' }">
+      <div class="message-bubble" [ngClass]="msg.role">
+        <div class="avatar">
+          <ion-icon [name]="msg.role === 'user' ? 'person-circle' : 'sparkles'"></ion-icon>
+        </div>
+        <div class="message-body">
+          <div class="message-text" [innerHTML]="msg.text | formatResponse: activeUseCase" (click)="onMessageContentClick($event)"></div>
+          <!-- Sources — clickable to open doc viewer -->
+          <div class="sources" *ngIf="msg.sources && msg.sources.length">
+            <ion-chip *ngFor="let src of msg.sources" color="tertiary" size="small" outline
+                      [routerLink]="['/documents', src]"
+                      [queryParams]="{use_case: activeUseCase}"
+                      class="clickable-chip">
+              <ion-icon name="document-outline"></ion-icon>
+              <ion-label>{{ src }}</ion-label>
+            </ion-chip>
+          </div>
+          <!-- Metadata + feedback -->
+          <div class="message-meta" *ngIf="msg.role === 'assistant'">
+            <span class="duration" *ngIf="msg.duration_ms">{{ msg.duration_ms }}ms</span>
+            <span class="retry-badge" *ngIf="msg.attempts && msg.attempts > 1">retry ×{{ msg.attempts }}</span>
+            <span class="feedback-btns">
+              <ion-button fill="clear" size="small"
+                          [color]="msg.feedbackGiven === 'up' ? 'success' : 'medium'"
+                          (click)="giveFeedback(msg, true)"
+                          [disabled]="msg.feedbackGiven !== null && msg.feedbackGiven !== undefined">
+                <ion-icon name="thumbs-up-outline" slot="icon-only"></ion-icon>
+              </ion-button>
+              <ion-button fill="clear" size="small"
+                          [color]="msg.feedbackGiven === 'down' ? 'danger' : 'medium'"
+                          (click)="giveFeedback(msg, false)"
+                          [disabled]="msg.feedbackGiven !== null && msg.feedbackGiven !== undefined">
+                <ion-icon name="thumbs-down-outline" slot="icon-only"></ion-icon>
+              </ion-button>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Typing indicator -->
+    <div class="message-row assistant-row" *ngIf="isLoading">
+      <div class="message-bubble assistant">
+        <div class="avatar"><ion-icon name="sparkles"></ion-icon></div>
+        <div class="message-body">
+          <div class="typing-indicator">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</ion-content>
+
+<!-- Input bar -->
+<ion-footer>
+  <ion-toolbar>
+    <div class="input-bar">
+      <textarea
+        class="chat-input"
+        [(ngModel)]="inputText"
+        (keydown)="onKeyDown($event)"
+        placeholder="Ask a question..."
+        rows="3"
+      ></textarea>
+      <ion-button
+        class="send-btn"
+        (click)="sendMessage()"
+        [disabled]="!inputText.trim() || isLoading"
+        fill="solid"
+        color="primary"
+        shape="round">
+        <ion-icon name="send" slot="icon-only"></ion-icon>
+      </ion-button>
+    </div>
+  </ion-toolbar>
+</ion-footer>

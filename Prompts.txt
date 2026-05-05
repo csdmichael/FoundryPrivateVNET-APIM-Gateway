@@ -1,0 +1,26 @@
+Foundry EndPoint for "foundryprivatevnet": https://foundryprivatevnet.services.ai.azure.com/api/projects/proj-default
+API Management:  /subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.ApiManagement/service/apim-poc-my
+AI Search for "aisearch-poc-myaacoub": /subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.Search/searchServices/aisearch-poc-myaacoub
+
+
+Create a private VNET in EastUS, private EndPoint for Foundry
+Update Foundry to use private vnet and private link
+Configure Foundry to use API Management as its AI Gateway
+Generate OpenAPI spec for Foundry API and register it in API Management
+In ai search called "aisearch-poc-myaacoub", create a clone of the following from ai search "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.Search/searchServices/ai-search-my":
+    - Data sources, Indexes, indexers for cosmos db data (eng-design-ppt, tax-pdf)
+    - create private endpoints, private links for "aisearch-poc-myaacoub" to have ai search within private vnet in east us
+In Foundry called "foundryprivatevnet", create a clone of the following agents from Foundry "https://001-ai-poc.services.ai.azure.com/api/projects/001-ai-proj":
+    - Eng-Design-PPT-Agent
+    - Tax-PDF-Forms-Agent
+Create Agent-Packages folder and package the 2 agents so I can install them in MS teams. 
+Add instructions in readme file on how to update manifest in packaged agents to route API calls via API Management
+Clone ui and api code from this github public repo: "https://github.com/csdmichael/AI-Search-Blob-Storage" and keep only code for 2 cosmos db use cases but point to foundry agents hosted in foundry "aisearch-poc-myaacoub" using APIM endpoints. Also register the api in apim and make ui code point to apim api endpoint 
+Draw architecture diagram including private vnet, private endpoints, ai search, cosmos db, API Management, foundry agent, apis and ui in a png diagram with Azure official Microsoft icons and store this architecture diagram in docs folder.
+Generate github actions workflow to deploy the whole solution, run it, test it and fix bugs.
+Refer architecture diagram in readme file. Include in readme.
+Document best practices for setting up Foundry in private vnet and adding APIM as AI gateway with references to Microsoft Learn articles
+Test project after provisioning all resources by running sample prompts.
+Created MIT license file to copyright for Michael Yaacoub at Microsoft.
+References:
+https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/ai-gateway?tabs=api-management&pivots=foundry-portal

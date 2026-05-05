@@ -1,0 +1,84 @@
+<ion-content>
+  <div class="history-container">
+    <!-- Tab selector -->
+    <ion-segment [(ngModel)]="activeTab" class="tab-bar">
+      <ion-segment-button value="conversations">
+        <ion-label>Q&A History ({{ conversations.length }})</ion-label>
+      </ion-segment-button>
+      <ion-segment-button value="feedback">
+        <ion-label>Feedback ({{ feedback.length }})</ion-label>
+      </ion-segment-button>
+    </ion-segment>
+
+    <!-- Conversations tab -->
+    <div *ngIf="activeTab === 'conversations'">
+      <div *ngIf="conversations.length === 0" class="empty-msg">
+        <ion-icon name="chatbubbles-outline"></ion-icon>
+        <p>No conversation history yet.</p>
+      </div>
+
+      <ion-card *ngFor="let entry of conversations; let i = index" class="history-card">
+        <ion-card-header>
+          <ion-card-subtitle>
+            <ion-icon [name]="getFeedbackIcon(entry)" [color]="getFeedbackColor(entry)" class="fb-icon"></ion-icon>
+            {{ entry.query }}
+          </ion-card-subtitle>
+        </ion-card-header>
+        <ion-card-content>
+          <p class="answer-text">{{ entry.text | slice:0:400 }}{{ entry.text.length > 400 ? '...' : '' }}</p>
+          <div class="history-meta">
+            <ion-badge color="medium" *ngIf="entry.duration_ms">{{ entry.duration_ms }}ms</ion-badge>
+            <ion-badge color="warning" *ngIf="entry.attempts && entry.attempts > 1">{{ entry.attempts }} attempts</ion-badge>
+            <ion-badge color="tertiary" *ngFor="let src of entry.sources">{{ src }}</ion-badge>
+            <span class="timestamp">{{ entry.timestamp | date:'short' }}</span>
+          </div>
+        </ion-card-content>
+      </ion-card>
+    </div>
+
+    <!-- Feedback tab -->
+    <div *ngIf="activeTab === 'feedback'">
+      <!-- Summary -->
+      <ion-grid class="feedback-summary" *ngIf="feedback.length > 0">
+        <ion-row>
+          <ion-col class="summary-card positive">
+            <ion-icon name="thumbs-up"></ion-icon>
+            <span>{{ positiveFeedbackCount }}</span>
+            <small>Relevant</small>
+          </ion-col>
+          <ion-col class="summary-card negative">
+            <ion-icon name="thumbs-down"></ion-icon>
+            <span>{{ negativeFeedbackCount }}</span>
+            <small>Not Relevant</small>
+          </ion-col>
+          <ion-col class="summary-card total">
+            <ion-icon name="analytics-outline"></ion-icon>
+            <span>{{ feedback.length > 0 ? (positiveFeedbackCount / feedback.length * 100 | number:'1.0-0') : 0 }}%</span>
+            <small>Approval</small>
+          </ion-col>
+        </ion-row>
+      </ion-grid>
+
+      <div *ngIf="feedback.length === 0" class="empty-msg">
+        <ion-icon name="star-outline"></ion-icon>
+        <p>No feedback submitted yet.</p>
+      </div>
+
+      <ion-list>
+        <ion-item *ngFor="let fb of feedback" lines="inset">
+          <ion-icon slot="start"
+                    [name]="fb.relevant ? 'thumbs-up' : 'thumbs-down'"
+                    [color]="fb.relevant ? 'success' : 'danger'"></ion-icon>
+          <ion-label class="ion-text-wrap">
+            <h3>{{ fb.query }}</h3>
+            <p>
+              <ion-badge color="tertiary">{{ fb.document_id }}</ion-badge>
+              <span class="timestamp">{{ fb.timestamp | date:'short' }}</span>
+            </p>
+            <p *ngIf="fb.notes" class="notes">{{ fb.notes }}</p>
+          </ion-label>
+        </ion-item>
+      </ion-list>
+    </div>
+  </div>
+</ion-content>

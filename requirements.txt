@@ -1,0 +1,12 @@
+# Runtime-only dependencies for the API App Service deployment.
+# Heavy script-only packages (matplotlib, azure-ai-evaluation, openai, etc.)
+# are excluded to keep the deployment zip small enough for Kudu.
+# Pin cryptography<43 for App Service Debian 11 (GLIBC 2.31) compatibility.
+cryptography<43
+azure-identity
+azure-ai-agents
+azure-cosmos
+azure-storage-blob
+fastapi
+uvicorn
+gunicorn

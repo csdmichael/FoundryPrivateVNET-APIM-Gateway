@@ -1,0 +1,157 @@
+<ion-content>
+  <div class="docs-container">
+
+    <!-- Document Detail View -->
+    <div *ngIf="selectedDoc || pdfUrl || originalText">
+      <ion-button fill="solid" color="primary" (click)="closeDocument()" class="back-btn">
+        <ion-icon name="arrow-back" slot="start"></ion-icon> Back to Documents
+      </ion-button>
+      <ion-card class="doc-detail-card">
+        <ion-card-header>
+          <ion-card-title>{{ selectedDocId }}</ion-card-title>
+        <ion-card-subtitle *ngIf="selectedDoc?.format === 'json' && selectedDoc?.content?.title">
+          {{ selectedDoc!.content.title }}
+        </ion-card-subtitle>
+      </ion-card-header>
+      <ion-card-content>
+        <!-- PDF viewer -->
+        <div *ngIf="pdfUrl" class="pdf-viewer">
+          <object *ngIf="viewerType === 'pdf'" [data]="pdfUrl" type="application/pdf" class="pdf-iframe">
+            <p>
+              This document could not be embedded in the current browser.
+              <a [href]="pdfUrl" target="_blank" rel="noopener noreferrer">Open it in a new tab</a>.
+            </p>
+          </object>
+        </div>
+        <div *ngIf="pptUrl && viewerType === 'ppt'" class="pdf-viewer">
+          <iframe [src]="pptUrl" class="pdf-iframe" title="PowerPoint viewer"></iframe>
+          <p class="viewer-fallback" *ngIf="originalFileUrl">
+            If the presentation does not render here, <a [href]="originalFileUrl" target="_blank" rel="noopener noreferrer">open the original PowerPoint file</a>.
+          </p>
+        </div>
+        <pre *ngIf="viewerType === 'text' && originalText" class="text-view">{{ originalText }}</pre>
+        <!-- JSON structured view -->
+        <ng-container *ngIf="selectedDoc">
+        <div *ngIf="selectedDoc.format === 'json'" class="json-view">
+          <!-- Parsed / Raw tabs -->
+          <ion-segment [(ngModel)]="jsonTab" class="json-tabs">
+            <ion-segment-button value="parsed"><ion-label>Parsed</ion-label></ion-segment-button>
+            <ion-segment-button value="raw"><ion-label>Raw JSON</ion-label></ion-segment-button>
+          </ion-segment>
+
+          <div *ngIf="jsonTab === 'parsed'">
+          <ion-grid>
+            <ion-row>
+              <ion-col size="6" size-md="4" *ngFor="let key of ['status','filter_type','frequency_band','substrate_material','product_line','target_defect','process_step','technology_node','design_center','fab_location','state','stateName','overallConfidence','confidenceCategory']">
+                <div class="meta-field" *ngIf="selectedDoc.content[key]">
+                  <span class="meta-label">{{ formatKey(key) | titlecase }}</span>
+                  <ion-badge [color]="key === 'status' ? getStatusColor(selectedDoc.content[key]) : (key === 'confidenceCategory' ? getConfidenceColor(selectedDoc.content[key]) : 'light')">
+                    {{ selectedDoc.content[key] }}
+                  </ion-badge>
+                </div>
+              </ion-col>
+            </ion-row>
+          </ion-grid>
+
+          <!-- Key measurements -->
+          <ion-item-divider color="light" class="section-divider">Key Measurements</ion-item-divider>
+          <ion-grid>
+            <ion-row>
+              <ion-col size="6" size-md="3" *ngFor="let key of ['center_frequency_mhz','bandwidth_3db_mhz','insertion_loss_measured_db','return_loss_measured_db','rejection_measured_db','q_factor','capture_rate_pct','nuisance_rate_pct','defect_count','die_yield_pct']">
+                <div class="metric-card" *ngIf="selectedDoc.content[key] != null">
+                  <span class="metric-label">{{ formatKey(key) | titlecase }}</span>
+                  <span class="metric-value">{{ selectedDoc.content[key] }}</span>
+                </div>
+              </ion-col>
+            </ion-row>
+          </ion-grid>
+
+          <!-- Sections -->
+          <div *ngFor="let secKey of getSectionKeys(selectedDoc.content)">
+            <ion-item-divider color="light" class="section-divider">{{ getSectionLabel(secKey) }}</ion-item-divider>
+            <div class="section-content" *ngIf="selectedDoc.content.sections[secKey]">{{ selectedDoc.content.sections[secKey] }}</div>
+            <!-- Image descriptions for this section -->
+            <div *ngIf="selectedDoc.content.sectionImages && selectedDoc.content.sectionImages[secKey]" class="image-descriptions">
+              <div *ngFor="let img of selectedDoc.content.sectionImages[secKey]" class="image-desc-card">
+                <ion-icon name="image-outline" color="primary"></ion-icon>
+                <div>
+                  <strong>{{ img.figureName }}</strong>
+                  <p *ngIf="img.description">{{ img.description }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          </div>
+
+          <!-- Raw JSON tab -->
+          <pre *ngIf="jsonTab === 'raw'" class="raw-json-view">{{ selectedDoc.content | json }}</pre>
+        </div>
+
+        <!-- Plain text view -->
+        <pre *ngIf="selectedDoc.format === 'text'" class="text-view">{{ selectedDoc.content }}</pre>
+        </ng-container>
+      </ion-card-content>
+    </ion-card>
+    </div>
+
+    <!-- Document List View -->
+    <div *ngIf="!selectedDoc && !pdfUrl && !originalText">
+      <!-- Search & filter bar -->
+      <ion-toolbar class="filter-bar">
+        <ion-searchbar [(ngModel)]="searchText" (ionInput)="applyFilter()" placeholder="Search documents..." debounce="300"></ion-searchbar>
+        <ion-segment [(ngModel)]="filterType" (ionChange)="applyFilter()" class="type-filter">
+          <ion-segment-button value="all"><ion-label>All</ion-label></ion-segment-button>
+          <ion-segment-button *ngFor="let t of availableTypes" [value]="t">
+            <ion-label>{{ t | uppercase }}</ion-label>
+          </ion-segment-button>
+        </ion-segment>
+      </ion-toolbar>
+
+      <ion-text color="medium" class="doc-count">
+        {{ filteredDocs.length }} documents
+        <span *ngIf="filteredDocs.length"> · Showing {{ pageStart }}-{{ pageEnd }}</span>
+      </ion-text>
+
+      <ion-card *ngIf="loadError" class="error-card" color="danger">
+        <ion-card-header>
+          <ion-card-title>Unable to load documents</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          {{ loadError }}
+        </ion-card-content>
+      </ion-card>
+
+      <ion-list>
+        <ion-item *ngFor="let doc of paginatedDocs" (click)="openDocument(doc.doc_id)" button detail>
+          <ion-icon [name]="getTypeIcon(doc.type)" slot="start" color="primary"></ion-icon>
+          <ion-label>
+            <h2>{{ doc.doc_id }}</h2>
+            <p *ngIf="doc.title">{{ doc.title }}</p>
+            <p class="doc-meta">
+              <ion-badge [color]="getStatusColor(doc.status || '')" *ngIf="doc.status">{{ doc.status }}</ion-badge>
+              <ion-badge color="tertiary" *ngIf="doc.state">{{ doc.state }}</ion-badge>
+              <ion-badge color="light" *ngIf="doc.confidence">{{ doc.confidence }}</ion-badge>
+              <span>{{ doc.type | uppercase }}<span *ngIf="doc.size_kb"> · {{ doc.size_kb }} KB</span></span>
+            </p>
+          </ion-label>
+        </ion-item>
+      </ion-list>
+
+      <div *ngIf="filteredDocs.length > pageSize" class="pagination-bar">
+        <ion-button fill="outline" size="small" (click)="previousPage()" [disabled]="!canGoPrevious">
+          Previous
+        </ion-button>
+        <ion-text color="medium" class="page-indicator">
+          Page {{ currentPage }} of {{ totalPages }}
+        </ion-text>
+        <ion-button fill="outline" size="small" (click)="nextPage()" [disabled]="!canGoNext">
+          Next
+        </ion-button>
+      </div>
+
+      <div *ngIf="isLoading" class="loading-center">
+        <ion-spinner name="crescent"></ion-spinner>
+      </div>
+    </div>
+  </div>
+</ion-content>

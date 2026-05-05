@@ -1,0 +1,10 @@
+.reference-app/
+.terraform/
+.deploy/
+*.tfstate
+*.tfstate.*
+tfplan
+__pycache__/
+*.pyc
+
+.terraform.lock.hcl

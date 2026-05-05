@@ -1,0 +1,162 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Foundry Private VNET App API",
+    "version": "1.0.0",
+    "description": "Backend API for the private Foundry + APIM + AI Search solution. Import into APIM to expose the UI-facing API."
+  },
+  "servers": [
+    {
+      "url": "https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Service health"
+          }
+        }
+      }
+    },
+    "/prompts": {
+      "get": {
+        "operationId": "getPrompts",
+        "parameters": [
+          {
+            "name": "use_case",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["tax_pdf_forms", "eng_design_ppt"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prompt catalog"
+          }
+        }
+      }
+    },
+    "/chat": {
+      "post": {
+        "operationId": "chat",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["prompt", "use_case"],
+                "properties": {
+                  "prompt": { "type": "string" },
+                  "use_case": { "type": "string", "enum": ["tax_pdf_forms", "eng_design_ppt"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Chat completion"
+          }
+        }
+      }
+    },
+    "/batch": {
+      "post": {
+        "operationId": "batch",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["prompts", "use_case"],
+                "properties": {
+                  "prompts": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "use_case": { "type": "string", "enum": ["tax_pdf_forms", "eng_design_ppt"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Batch response"
+          }
+        }
+      }
+    },
+    "/feedback": {
+      "get": {
+        "operationId": "getFeedback",
+        "parameters": [
+          {
+            "name": "use_case",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["tax_pdf_forms", "eng_design_ppt"]
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Feedback log" }
+        }
+      },
+      "post": {
+        "operationId": "submitFeedback",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["query", "document_id", "relevant", "use_case"],
+                "properties": {
+                  "query": { "type": "string" },
+                  "document_id": { "type": "string" },
+                  "relevant": { "type": "boolean" },
+                  "score": { "type": "number" },
+                  "notes": { "type": "string" },
+                  "use_case": { "type": "string", "enum": ["tax_pdf_forms", "eng_design_ppt"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Feedback accepted" }
+        }
+      }
+    },
+    "/documents": {
+      "get": {
+        "operationId": "listDocuments",
+        "parameters": [
+          {
+            "name": "use_case",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["tax_pdf_forms", "eng_design_ppt"]
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Sample document list" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.19",
+  "version": "1.0.0",
+  "id": "3d33b58f-6c93-48c4-b8b6-6da36fd8d111",
+  "packageName": "com.microsoft.foundryprivatevnet.taxpdfforms",
+  "name": {
+    "short": "Tax PDF Forms Agent",
+    "full": "Tax PDF Forms Agent via APIM"
+  },
+  "developer": {
+    "name": "Michael Yaacoub at Microsoft",
+    "websiteUrl": "https://apim-poc-my.azure-api.net",
+    "privacyUrl": "https://apim-poc-my.azure-api.net/privacy",
+    "termsOfUseUrl": "https://apim-poc-my.azure-api.net/terms"
+  },
+  "description": {
+    "short": "Foundry agent package for tax PDF forms.",
+    "full": "Teams package for the Tax PDF Forms agent routed through Azure API Management."
+  },
+  "icons": {
+    "outline": "outline.png",
+    "color": "color.png"
+  },
+  "accentColor": "#0F6CBD",
+  "bots": [],
+  "composeExtensions": [],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": ["apim-poc-my.azure-api.net"]
+}

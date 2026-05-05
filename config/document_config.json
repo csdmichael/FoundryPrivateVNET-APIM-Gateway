@@ -1,0 +1,46 @@
+{
+  "use_cases": {
+    "tax_pdf_forms": {
+      "label": "Tax PDF Forms",
+      "data_source": "cosmosdb",
+      "file_format": "pdf",
+      "sample_documents": [
+        {
+          "filename": "lq_tax_exemption_IN_001_yellow.pdf",
+          "doc_id": "lq_tax_exemption_IN_001_yellow",
+          "type": "pdf",
+          "size_kb": 0,
+          "title": "Indiana Tax Exemption Certificate"
+        },
+        {
+          "filename": "lq_tax_exemption_WV_002_red.pdf",
+          "doc_id": "lq_tax_exemption_WV_002_red",
+          "type": "pdf",
+          "size_kb": 0,
+          "title": "West Virginia Resale Certificate"
+        }
+      ]
+    },
+    "eng_design_ppt": {
+      "label": "Engineering Design PPT",
+      "data_source": "cosmosdb",
+      "file_format": "pptx",
+      "sample_documents": [
+        {
+          "filename": "engineering_design_review_001.pptx",
+          "doc_id": "engineering_design_review_001",
+          "type": "pptx",
+          "size_kb": 0,
+          "title": "Engineering Design Review"
+        },
+        {
+          "filename": "solution_architecture_update_002.pptx",
+          "doc_id": "solution_architecture_update_002",
+          "type": "pptx",
+          "size_kb": 0,
+          "title": "Solution Architecture Update"
+        }
+      ]
+    }
+  }
+}

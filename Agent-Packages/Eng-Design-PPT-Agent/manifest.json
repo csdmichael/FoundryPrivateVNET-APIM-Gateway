@@ -1,0 +1,30 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.19",
+  "version": "1.0.0",
+  "id": "2f3f3c91-1f4f-4c0f-b40c-1b6f6f1b1222",
+  "packageName": "com.microsoft.foundryprivatevnet.engdesignppt",
+  "name": {
+    "short": "Eng Design PPT Agent",
+    "full": "Engineering Design PPT Agent via APIM"
+  },
+  "developer": {
+    "name": "Michael Yaacoub at Microsoft",
+    "websiteUrl": "https://apim-poc-my.azure-api.net",
+    "privacyUrl": "https://apim-poc-my.azure-api.net/privacy",
+    "termsOfUseUrl": "https://apim-poc-my.azure-api.net/terms"
+  },
+  "description": {
+    "short": "Foundry agent package for engineering design presentations.",
+    "full": "Teams package for the Engineering Design PPT agent routed through Azure API Management."
+  },
+  "icons": {
+    "outline": "outline.png",
+    "color": "color.png"
+  },
+  "accentColor": "#0F6CBD",
+  "bots": [],
+  "composeExtensions": [],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": ["apim-poc-my.azure-api.net"]
+}
