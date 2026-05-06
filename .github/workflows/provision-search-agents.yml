@@ -52,13 +52,14 @@ jobs:
         if: steps.provision_agents.outcome == 'failure'
         shell: pwsh
         run: |
-          @"
-          ## Foundry agent provisioning skipped
-
-          Search asset provisioning completed, but Foundry agent provisioning could not run because the GitHub Actions identity is missing `Azure AI User` on the Foundry account.
-
-          Grant the role with an identity that has `Owner` or `User Access Administrator` on the Foundry account scope, then rerun this workflow:
-
-          `az role assignment create --assignee-object-id 40d4ac00-c7cd-4e92-85af-8a56cf3c769b --assignee-principal-type ServicePrincipal --role "Azure AI User" --scope /subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/ai-myaacoub/providers/Microsoft.CognitiveServices/accounts/002-ai-poc-private`
-          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          $summary = @(
+            '## Foundry agent provisioning skipped'
+            ''
+            'Search asset provisioning completed, but Foundry agent provisioning could not run because the GitHub Actions identity is missing `Azure AI User` on the Foundry account.'
+            ''
+            'Grant the role with an identity that has `Owner` or `User Access Administrator` on the Foundry account scope, then rerun this workflow:'
+            ''
+            '`az role assignment create --assignee-object-id 40d4ac00-c7cd-4e92-85af-8a56cf3c769b --assignee-principal-type ServicePrincipal --role "Azure AI User" --scope /subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/ai-myaacoub/providers/Microsoft.CognitiveServices/accounts/002-ai-poc-private`'
+          ) -join "`n"
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           Write-Warning "Foundry agent provisioning skipped because the workflow identity is missing Azure AI User on the Foundry account."
