@@ -407,7 +407,7 @@ Main workflow:
 ./scripts/deploy.ps1
 ```
 
-That script runs Terraform validate plus a direct apply by default, then clones `https://github.com/csdmichael/AI-Search-Blob-Storage` at runtime and applies this repo's private Foundry, Search, and Cosmos resource settings to provision the retained Search indexes and Foundry agents, configures the APIM surface, configures the Foundry OpenAI APIM gateway, generates Teams packages, and runs sample prompt tests.
+That script runs Terraform validate plus a direct apply by default, then uses the local provisioning scripts in this repo to create the retained Search indexes and Foundry agents from this repo's private Foundry, Search, and Cosmos configuration, configures the APIM surface, configures the Foundry OpenAI APIM gateway, generates Teams packages, and runs sample prompt tests.
 
 App Service infrastructure is opt-in. Use `-DeployApi` and `-DeployUi` only when you want Terraform to manage the web apps and their shared App Service plan.
 
@@ -488,17 +488,17 @@ Notes:
 - The workflows still use a single Terraform configuration and a branch-scoped OIDC credential for `main`.
 - API and UI GitHub Actions deployments are currently disabled, so App Service changes for those components are not deployed through the active workflow set.
 - Docs-only updates are ignored by deployment workflows.
-- Post-deploy provisioning clones `https://github.com/csdmichael/AI-Search-Blob-Storage` at runtime and overlays this repo's private Foundry, Search, and Cosmos resource settings.
+- Post-deploy provisioning is self-contained in this repo and no longer clones or patches the external `AI-Search-Blob-Storage` repository at deployment time.
 - The private Foundry project uses the `aisearchpocmyaacoub` Azure AI Search connection created by `scripts/ensure-foundry-search-connection.ps1`.
 - The private Search service must have a system-assigned managed identity enabled.
 - That Search managed identity must have Cosmos DB account reader plus Cosmos SQL data access on `cosmos-ai-poc`.
 - The private Search service must have an approved shared private link to `cosmos-ai-poc` named `cosmos-ai-poc-sql` before Cosmos-backed Search indexers can populate data.
 
-## Source-Driven Search And Agent Provisioning
+## Local Search And Agent Provisioning
 
 The deployment no longer clones live Azure Search objects or live Foundry agents from the source environment.
 
-Instead, the post-deploy step clones `https://github.com/csdmichael/AI-Search-Blob-Storage`, overlays the private target resource settings from this repo, and provisions only the retained use cases:
+Instead, the post-deploy step uses local scripts in this repo to provision only the retained use cases:
 
 - `tax_pdf_forms`
 - `eng_design_ppt`
@@ -516,7 +516,7 @@ Compatibility entrypoints still exist:
 ./scripts/clone-foundry-agents.ps1
 ```
 
-Those wrappers now delegate to the source-driven provisioning flow instead of cloning live Azure objects.
+Those wrappers now delegate to the same local provisioning flow.
 
 Important network prerequisite:
 
