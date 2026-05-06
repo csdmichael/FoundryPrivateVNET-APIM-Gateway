@@ -149,27 +149,28 @@ Notes:
 
 ## APIM Configuration
 
-The deployment configures two APIM surfaces:
+The deployment configures three APIM surfaces:
 
-- the backend OpenAPI surface for the app at `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api`
-- the Foundry OpenAI gateway at `https://ai-gateway-apim-poc-my.azure-api.net/002-ai-poc-private/openai`
+- **App backend API** at `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app` — imported from the OpenAPI spec, subscription-free
+- **Foundry OpenAI gateway** at `https://ai-gateway-apim-poc-my.azure-api.net/002-ai-poc-private/openai` — proxies to the Foundry account with managed identity
+- **Teams chat endpoint** at `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/chat` — APIM operation-level policy transforms flat `{prompt}` into OpenAI chat completions
 
 ```powershell
 ./scripts/configure-apim.ps1
 ./scripts/configure-foundry-ai-gateway.ps1
 ```
 
-The production UI is configured to call:
+### Chat operation policy
 
-- `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api`
+The `/chat` operation on the `foundry-privatevnet-app` API uses an APIM policy that:
 
-Backend settings used by the App Service deployment:
+1. Extracts the `prompt` field from the incoming `{"prompt": "..."}` request
+2. Rewrites the backend to `https://002-ai-poc-private.services.ai.azure.com/openai/deployments/gpt-4.1/chat/completions`
+3. Authenticates with Foundry using the APIM system-assigned managed identity (`Cognitive Services User`)
+4. Transforms the flat prompt into OpenAI chat format with system instructions
+5. Transforms the OpenAI response back to flat `{"response": "...", "use_case": "..."}` for the Teams adaptive card
 
-- `APIM_GATEWAY_URL`
-- `APIM_SUBSCRIPTION_KEY`
-- `ALLOWED_ORIGINS`
-- `TAX_PDF_FORMS_APIM_PATH`
-- `ENG_DESIGN_PPT_APIM_PATH`
+This eliminates the need for a backend API app service. The Teams message extension calls APIM directly, and APIM handles all Foundry communication.
 
 ## AI Gateway Screenshots
 
@@ -270,6 +271,42 @@ The [Teams Developer Portal](https://dev.teams.microsoft.com) lets you test and 
 
 This bypasses the Teams Admin Center approval flow and installs the app only for your account.
 
+### Publishing via VS Code
+
+Install the [Teams Toolkit](https://marketplace.visualstudio.com/items?itemName=TeamsDevApp.ms-teams-vscode-extension) extension for VS Code. It provides manifest validation, sideloading, and debugging directly from the editor:
+
+1. Install the extension from the VS Code Marketplace.
+2. Open the `Agent-Packages/<AgentName>` folder.
+3. Use **Teams Toolkit: Validate manifest** to check the manifest before uploading.
+4. Use **Teams Toolkit: Zip Teams Metadata Package** or run `./scripts/package-teams-agents.ps1`.
+5. Use **Teams Toolkit: Upload to Teams** to sideload the package for testing.
+
+### Data flow: Teams agent → APIM → Foundry
+
+The Teams agent packages call APIM directly with a flat `{prompt}` request. APIM transforms it into an OpenAI chat completions call to Foundry and returns a flat response. No backend API app service or subscription key is required from the Teams side.
+
+```mermaid
+sequenceDiagram
+    participant User as Teams User
+    participant Teams as Microsoft Teams
+    participant APIM as Azure API Management<br/>(ai-gateway-apim-poc-my)
+    participant Foundry as Azure AI Foundry<br/>(002-ai-poc-private)
+    participant Search as Azure AI Search<br/>(aisearch-poc-myaacoub)
+
+    User->>Teams: Types question in compose box
+    Teams->>Teams: Reads apiSpecificationFile.json<br/>from message extension manifest
+    Teams->>APIM: POST /foundry-privatevnet-app/chat<br/>Body: {"prompt": "..."}
+    APIM->>APIM: Extracts prompt, builds<br/>OpenAI chat request
+    APIM->>Foundry: POST /openai/deployments/gpt-4.1/<br/>chat/completions<br/>Auth: managed identity
+    Foundry->>Search: Queries search index<br/>(tax-pdf-forms-index or<br/>eng-design-ppt-index)
+    Search-->>Foundry: Returns grounded chunks
+    Foundry-->>APIM: Chat completion response
+    APIM->>APIM: Transforms to flat JSON<br/>{"response": "...", "use_case": "..."}
+    APIM-->>Teams: Flat JSON response
+    Teams->>Teams: Renders responseRenderingTemplate.json<br/>(Adaptive Card)
+    Teams-->>User: Displays answer card
+```
+
 ### Common packaging errors
 
 | Error | Cause | Fix |
@@ -278,6 +315,9 @@ This bypasses the Teams Admin Center approval flow and installs the app only for
 | Color icon wrong dimension | `color.png` is not 192x192 | Regenerate as 192x192 PNG |
 | Outline icon not transparent | `outline.png` has non-transparent background | Regenerate as 32x32, white on transparent PNG |
 | No Supported Products | Manifest has no `composeExtensions` or `staticTabs` | Add a `composeExtensions` entry with `composeExtensionType: "apiBased"` |
+| Unsupported schema type (arrays) | Request body uses array types | Flatten to simple string properties; use APIM policy to transform into arrays |
+| `apiResponseRenderingTemplateFile` not defined | Wrong manifest schema version | Use `devPreview` manifest version |
+| `previewCardTemplate` missing | Response template missing required field | Add `previewCardTemplate` with at least a `title` |
 
 ## Source-Driven Search And Agent Provisioning
 

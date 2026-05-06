@@ -1,6 +1,6 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
-  "manifestVersion": "1.19",
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json",
+  "manifestVersion": "devPreview",
   "version": "1.0.0",
   "id": "3d33b58f-6c93-48c4-b8b6-6da36fd8d111",
   "name": {
@@ -33,6 +33,7 @@
           "title": "Ask Tax PDF Forms",
           "description": "Ask a question about tax PDF forms",
           "initialRun": false,
+          "apiResponseRenderingTemplateFile": "responseRenderingTemplate.json",
           "parameters": [
             {
               "name": "prompt",

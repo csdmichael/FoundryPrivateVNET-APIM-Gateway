@@ -159,18 +159,17 @@ foreach ($import in $imports) {
     }
 
     Write-Host "Importing $address"
-    $importOutput = & terraform import '-var-file=main.tfvars.json' $address $resourceId 2>&1
-    $importExitCode = $LASTEXITCODE
-    if ($importExitCode -ne 0) {
-        $outputText = $importOutput | Out-String
-        if ($outputText -match 'Cannot import non-existent|not found|does not exist') {
-            Write-Host "Not present in Azure, skipping: $address"
-            $global:LASTEXITCODE = 0
+    # Run import and capture only exit code reliably
+    & terraform import '-var-file=main.tfvars.json' $address $resourceId *>&1 | ForEach-Object { Write-Host "  $_" }
+    if ($LASTEXITCODE -ne 0) {
+        # Check if the resource genuinely doesn't exist in Azure
+        $stateCheck = @(terraform state list 2>$null)
+        if ($stateCheck -contains $address) {
+            Write-Host "  Import recovered: $address is now in state"
         }
         else {
             $ErrorActionPreference = $prevErrorPref
-            Write-Host $outputText
-            throw "terraform import failed for $address"
+            throw "terraform import failed for $address (exit code $LASTEXITCODE)"
         }
     }
 }

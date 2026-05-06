@@ -1,6 +1,6 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
-  "manifestVersion": "1.19",
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json",
+  "manifestVersion": "devPreview",
   "version": "1.0.0",
   "id": "2f3f3c91-1f4f-4c0f-b40c-1b6f6f1b1222",
   "name": {
@@ -33,6 +33,7 @@
           "title": "Ask Eng Design PPT",
           "description": "Ask a question about engineering design presentations",
           "initialRun": false,
+          "apiResponseRenderingTemplateFile": "responseRenderingTemplate.json",
           "parameters": [
             {
               "name": "prompt",

@@ -7,14 +7,14 @@
   },
   "servers": [
     {
-      "url": "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api"
+      "url": "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app"
     }
   ],
   "paths": {
     "/chat": {
       "post": {
         "operationId": "chatWithAgent",
-        "summary": "Send a message to the Engineering Design PPT agent",
+        "summary": "Ask a question about engineering design presentations",
         "requestBody": {
           "required": true,
           "content": {
@@ -25,12 +25,7 @@
                 "properties": {
                   "prompt": {
                     "type": "string",
-                    "description": "The user's question about engineering design presentations"
-                  },
-                  "use_case": {
-                    "type": "string",
-                    "default": "eng_design_ppt",
-                    "enum": ["eng_design_ppt"]
+                    "description": "Your question about engineering design presentations"
                   }
                 }
               }
@@ -45,13 +40,12 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "prompt": { "type": "string" },
-                    "response": { "type": "string" },
-                    "use_case": { "type": "string" },
-                    "duration_ms": { "type": "integer" },
-                    "sources": {
-                      "type": "array",
-                      "items": { "type": "string" }
+                    "response": {
+                      "type": "string",
+                      "description": "The agent answer"
+                    },
+                    "use_case": {
+                      "type": "string"
                     }
                   }
                 }
