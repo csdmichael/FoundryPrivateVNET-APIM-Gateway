@@ -1,0 +1,22 @@
+name: package-teams-agents
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Agent-Packages/**'
+      - 'scripts/package-teams-agents.ps1'
+      - '.github/workflows/package-teams-agents.yml'
+
+jobs:
+  package-teams-agents:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package Teams agents
+        shell: pwsh
+        run: ./scripts/package-teams-agents.ps1

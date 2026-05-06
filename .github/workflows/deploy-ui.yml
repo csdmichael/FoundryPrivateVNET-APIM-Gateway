@@ -1,0 +1,85 @@
+name: deploy-ui
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'ui/**'
+      - '.github/workflows/deploy-ui.yml'
+
+env:
+  TF_IN_AUTOMATION: true
+
+jobs:
+  terraform-ui:
+    runs-on: ubuntu-latest
+    env:
+      TF_VAR_deploy_api: false
+      TF_VAR_deploy_ui: true
+      TF_VAR_bot_app_password: ${{ secrets.BOT_APP_PASSWORD }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - name: Validate bot secret configured
+        shell: bash
+        run: |
+          if [ -z "${TF_VAR_bot_app_password}" ]; then
+            echo "BOT_APP_PASSWORD secret is not configured. Teams bot auth will fail without it."
+            exit 1
+          fi
+      - name: Terraform init
+        run: terraform init
+      - name: Import existing Azure resources
+        shell: pwsh
+        run: ./scripts/terraform-import-existing.ps1
+      - name: Terraform validate
+        run: terraform validate
+      - name: Terraform apply
+        if: github.ref == 'refs/heads/main'
+        run: terraform apply -auto-approve -var-file=main.tfvars.json
+      - name: Terraform plan
+        if: github.ref != 'refs/heads/main'
+        run: terraform plan -var-file=main.tfvars.json
+
+  build-and-deploy-ui:
+    needs: terraform-ui
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm ci
+      - name: Build UI
+        working-directory: ui
+        run: npm run build
+      - name: Deploy UI
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.UI_WEBAPP_NAME }}
+          package: ui/www

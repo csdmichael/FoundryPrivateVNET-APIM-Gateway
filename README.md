@@ -462,22 +462,32 @@ Repository secrets configured in `csdmichael/FoundryPrivateVNET-APIM-Gateway`:
 | `UI_WEBAPP_NAME` | `foundry-privatevnet-ui` |
 | `APP_API_BASE_URL` | `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app` |
 
-GitHub environments are not required by the current workflow. The deployment runs as a single pipeline against one Terraform configuration and authenticates through the `main` branch OIDC subject.
+GitHub environments are not required by the current workflow set. Authentication still uses the `main` branch OIDC subject, but deployment is now split across component-specific workflows so only the affected surface deploys.
 
-When you run the `deploy` workflow manually from GitHub Actions, `deploy_api` and `deploy_ui` default to `false` and let you opt into either app deployment. Pushes to `main` run the infrastructure and post-deploy gateway/provisioning flow without redeploying the App Services.
+Current workflow split:
+
+- `deploy-infra.yml` for Terraform and resource import changes
+- `deploy-bot.yml` for the bot function app
+- `deploy-api.yml` for the API app plus its opt-in App Service infrastructure
+- `deploy-ui.yml` for the UI app plus its opt-in App Service infrastructure
+- `configure-platform.yml` for APIM and Foundry AI gateway configuration
+- `provision-search-agents.yml` for Search asset and Foundry agent provisioning
+- `package-teams-agents.yml` for Teams package zips
+
+Pushes to `main` trigger only the workflows whose path filters match the changed component. Changes limited to `README.md` or files under `docs/` do not trigger any deployment workflow.
 
 Recommended operator flow:
 
-1. Push to `main` or run the `deploy` workflow manually from GitHub Actions.
-2. Let the `terraform`, `deploy-bot-function`, and `post-deploy` jobs finish.
-3. Validate the APIM chat and Foundry OpenAI gateway paths from within the private VNet (these endpoints are not publicly reachable).
-4. Import the Teams agent packages and test in Teams.
+1. Push to `main` or run the specific workflow for the component you want to deploy.
+2. Let the matching component workflow finish.
+3. If infrastructure, APIM, or agent provisioning changed, validate the APIM chat and Foundry OpenAI gateway paths from within the private VNet.
+4. If Teams package assets changed, download the zipped agent packages and reimport them into Teams.
 
 Notes:
 
-- The workflow uses a single Terraform configuration and a branch-scoped OIDC credential for `main`.
-- The bot function is deployed automatically on every push to `main`.
-- The sample prompt smoke test runs through APIM.
+- The workflows still use a single Terraform configuration and a branch-scoped OIDC credential for `main`.
+- API and UI workflows set `TF_VAR_deploy_api` or `TF_VAR_deploy_ui` before applying Terraform so those App Service resources stay opt-in.
+- Docs-only updates are ignored by deployment workflows.
 - Post-deploy provisioning clones `https://github.com/csdmichael/AI-Search-Blob-Storage` at runtime and overlays this repo's private Foundry, Search, and Cosmos resource settings.
 - The private Foundry project uses the `aisearchpocmyaacoub` Azure AI Search connection created by `scripts/ensure-foundry-search-connection.ps1`.
 - The private Search service must have a system-assigned managed identity enabled.

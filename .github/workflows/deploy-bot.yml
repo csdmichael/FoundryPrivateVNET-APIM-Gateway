@@ -1,0 +1,49 @@
+name: deploy-bot
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'bot-function/**'
+      - '.github/workflows/deploy-bot.yml'
+
+jobs:
+  deploy-bot-function:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy bot function
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: func-fdryvnetgw-bot-eastus
+          package: bot-function
+          scm-do-build-during-deployment: true
+      - name: Verify bot health endpoint
+        shell: bash
+        run: |
+          max_attempts=10
+          delay=30
+          sleep 30
+          for attempt in $(seq 1 $max_attempts); do
+            if curl --fail --silent --show-error https://func-fdryvnetgw-bot-eastus.azurewebsites.net/api/health; then
+              echo "Health check passed"
+              break
+            fi
+            if [ $attempt -lt $max_attempts ]; then
+              echo "Health check failed (attempt $attempt/$max_attempts), retrying in ${delay}s..."
+              sleep $delay
+            else
+              echo "Health check failed after $max_attempts attempts"
+              exit 1
+            fi
+          done

@@ -1,0 +1,41 @@
+name: provision-search-agents
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'config/agent_config.json'
+      - 'config/azure_resources.json'
+      - 'config/document_config.json'
+      - 'config/search_config.json'
+      - 'scripts/ensure-foundry-search-connection.ps1'
+      - 'scripts/provision-source-use-cases.ps1'
+      - 'requirements-deploy.txt'
+      - 'requirements.txt'
+      - '.github/workflows/provision-search-agents.yml'
+
+jobs:
+  provision-search-agents:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deployment dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-deploy.txt
+      - name: Provision private Search and agents from source repo
+        shell: pwsh
+        run: ./scripts/provision-source-use-cases.ps1
