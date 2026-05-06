@@ -16,10 +16,14 @@ if (-not $SearchOnly -and -not $AgentsOnly) {
 
 $config = Get-Content .\config\azure_resources.json | ConvertFrom-Json
 $sourceConfigDir = Join-Path ([System.IO.Path]::GetTempPath()) ("ai-search-blob-storage-" + [guid]::NewGuid().ToString('N'))
+$sourceAzureResourcesPath = [System.IO.Path]::Combine($sourceConfigDir, 'config', 'azure_resources.json')
+$sourceAgentConfigPath = [System.IO.Path]::Combine($sourceConfigDir, 'config', 'agent_config.json')
+$sourceSearchConfigPath = [System.IO.Path]::Combine($sourceConfigDir, 'config', 'search_config.json')
+$sourceCreateSearchScriptPath = [System.IO.Path]::Combine($sourceConfigDir, 'scripts', 'create_cosmosdb_search_index.py')
+$sourceCreateAgentScriptPath = [System.IO.Path]::Combine($sourceConfigDir, 'scripts', 'create_agent.py')
 
 git clone --depth 1 $SourceRepo $sourceConfigDir | Out-Null
 
-$sourceAzureResourcesPath = Join-Path $sourceConfigDir 'config\azure_resources.json'
 $sourceAzureResources = Get-Content $sourceAzureResourcesPath | ConvertFrom-Json
 $sourceAzureResources.subscription_id = $config.subscription_id
 $sourceAzureResources.resource_group = $config.resource_group
@@ -35,7 +39,6 @@ $json = $sourceAzureResources | ConvertTo-Json -Depth 20
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($sourceAzureResourcesPath, $json, $utf8NoBom)
 
-$sourceAgentConfigPath = Join-Path $sourceConfigDir 'config\agent_config.json'
 $localAgentConfigPath = Join-Path (Get-Location) 'config\agent_config.json'
 [System.IO.File]::WriteAllText(
     $sourceAgentConfigPath,
@@ -43,7 +46,6 @@ $localAgentConfigPath = Join-Path (Get-Location) 'config\agent_config.json'
     $utf8NoBom
 )
 
-$sourceSearchConfigPath = Join-Path $sourceConfigDir 'config\search_config.json'
 $sourceSearchConfig = Get-Content $sourceSearchConfigPath | ConvertFrom-Json
 foreach ($useCase in @('tax_pdf_forms', 'eng_design_ppt')) {
     $sourceSearchConfig.use_cases.$useCase.chunked_index.name = $sourceSearchConfig.use_cases.$useCase.standard_index.name
@@ -52,7 +54,6 @@ foreach ($useCase in @('tax_pdf_forms', 'eng_design_ppt')) {
 $searchJson = $sourceSearchConfig | ConvertTo-Json -Depth 20
 [System.IO.File]::WriteAllText($sourceSearchConfigPath, $searchJson, $utf8NoBom)
 
-$sourceCreateSearchScriptPath = Join-Path $sourceConfigDir 'scripts\create_cosmosdb_search_index.py'
 $sourceCreateSearchScript = [System.IO.File]::ReadAllText($sourceCreateSearchScriptPath)
 $sourceCreateSearchScript = $sourceCreateSearchScript.Replace(
     'from azure.identity import DefaultAzureCredential',
@@ -63,6 +64,17 @@ $sourceCreateSearchScript = $sourceCreateSearchScript.Replace(
     '    credential = AzureKeyCredential(os.environ["AZURE_AI_SEARCH_KEY"])'
 )
 [System.IO.File]::WriteAllText($sourceCreateSearchScriptPath, $sourceCreateSearchScript, $utf8NoBom)
+
+$sourceCreateAgentScript = [System.IO.File]::ReadAllText($sourceCreateAgentScriptPath)
+$sourceCreateAgentScript = $sourceCreateAgentScript.Replace(
+    'from azure.ai.agents import AgentsClient',
+    "from azure.ai.agents import AgentsClient`nfrom azure.ai.projects import AIProjectClient"
+)
+$sourceCreateAgentScript = $sourceCreateAgentScript.Replace(
+    'project_client = AgentsClient(endpoint=PROJECT_ENDPOINT, credential=credential)',
+    'project_client = AIProjectClient(endpoint=PROJECT_ENDPOINT, credential=credential).agents'
+)
+[System.IO.File]::WriteAllText($sourceCreateAgentScriptPath, $sourceCreateAgentScript, $utf8NoBom)
 
 $searchAdminKey = az search admin-key show --service-name $config.search.target_service_name --resource-group $config.resource_group --query primaryKey -o tsv
 if (-not $searchAdminKey) {
@@ -80,12 +92,12 @@ try {
         $env:USE_CASE = $useCase
 
         if ($SearchOnly) {
-            & $pythonCommand .\scripts\create_cosmosdb_search_index.py
+            & $pythonCommand $sourceCreateSearchScriptPath
         }
 
         if ($AgentsOnly) {
             $env:AZURE_AI_SEARCH_CONNECTION_NAME = $config.foundry.search_connection_name
-            & $pythonCommand .\scripts\create_agent.py
+            & $pythonCommand $sourceCreateAgentScriptPath
         }
     }
 }

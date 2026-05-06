@@ -5,6 +5,7 @@
 cryptography<43
 azure-identity
 azure-ai-agents
+azure-ai-projects
 azure-cosmos
 azure-storage-blob
 fastapi

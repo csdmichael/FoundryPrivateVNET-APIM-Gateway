@@ -1,5 +1,6 @@
 cryptography<43
 azure-identity
 azure-ai-agents
+azure-ai-projects
 azure-cosmos
 azure-search-documents
