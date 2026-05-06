@@ -162,12 +162,16 @@ $agentsApiExitCode = $LASTEXITCODE
 $ErrorActionPreference = 'Stop'
 if ($agentsApiExitCode -ne 0 -or -not $agentsApiExists) {
     Write-Host "Creating APIM Foundry Agents API"
-    az apim api create --resource-group $resourceGroup --service-name $apimName --api-id $agentsApiId --path $agentsApiPath --display-name "Foundry Agents Gateway" --protocols https --service-url $agentsBackend --subscription-required false -o none
+    $ErrorActionPreference = 'Continue'
+    az apim api create --resource-group $resourceGroup --service-name $apimName --api-id $agentsApiId --path $agentsApiPath --display-name "Foundry Agents Gateway" --protocols https --service-url $agentsBackend --subscription-required false -o none 2>$null
+    $ErrorActionPreference = 'Stop'
     Assert-LastExitCode "Creating APIM API '$agentsApiId'"
 }
 else {
     Write-Host "Updating APIM Foundry Agents API"
-    az apim api update --resource-group $resourceGroup --service-name $apimName --api-id $agentsApiId --set path=$agentsApiPath serviceUrl=$agentsBackend subscriptionRequired=false -o none
+    $ErrorActionPreference = 'Continue'
+    az apim api update --resource-group $resourceGroup --service-name $apimName --api-id $agentsApiId --set path=$agentsApiPath serviceUrl=$agentsBackend subscriptionRequired=false -o none 2>$null
+    $ErrorActionPreference = 'Stop'
     Assert-LastExitCode "Updating APIM API '$agentsApiId'"
 }
 
@@ -184,7 +188,9 @@ foreach ($op in $agentsOps) {
     $opExitCode = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'
     if ($opExitCode -ne 0 -or -not $existingOp) {
-        az apim api operation create --resource-group $resourceGroup --service-name $apimName --api-id $agentsApiId --operation-id $op.Id --display-name $op.Display --method $op.Method --url-template "/*" -o none
+        $ErrorActionPreference = 'Continue'
+        az apim api operation create --resource-group $resourceGroup --service-name $apimName --api-id $agentsApiId --operation-id $op.Id --display-name $op.Display --method $op.Method --url-template "/*" -o none 2>$null
+        $ErrorActionPreference = 'Stop'
         Assert-LastExitCode "Creating APIM $($op.Method) proxy operation for agents"
     }
 }
@@ -194,7 +200,7 @@ $agentsPolicyXml = @"
 <policies>
   <inbound>
     <base />
-    <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+    <authentication-managed-identity resource="https://ai.azure.com" />
     <set-header name="Host" exists-action="override">
       <value>$foundryAccountName.services.ai.azure.com</value>
     </set-header>
