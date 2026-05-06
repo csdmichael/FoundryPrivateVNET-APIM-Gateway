@@ -180,7 +180,7 @@ jobs:
     if: >-
       always() &&
       needs.terraform.result == 'success' &&
-      contains(fromJson('[\"success\",\"skipped\"]'), needs.deploy-bot-function.result) &&
+      contains(fromJson('["success","skipped"]'), needs.deploy-bot-function.result) &&
       contains(fromJson('["success","skipped"]'), needs.build-and-deploy-api.result) &&
       contains(fromJson('["success","skipped"]'), needs.build-and-deploy-ui.result)
     runs-on: ubuntu-latest
@@ -213,7 +213,7 @@ jobs:
     if: >-
       always() &&
       needs.terraform.result == 'success' &&
-      contains(fromJson('[\"success\",\"skipped\"]'), needs.deploy-bot-function.result) &&
+      contains(fromJson('["success","skipped"]'), needs.deploy-bot-function.result) &&
       contains(fromJson('["success","skipped"]'), needs.build-and-deploy-api.result) &&
       contains(fromJson('["success","skipped"]'), needs.build-and-deploy-ui.result)
     runs-on: ubuntu-latest
@@ -243,7 +243,7 @@ jobs:
     if: >-
       always() &&
       needs.terraform.result == 'success' &&
-      contains(fromJson('[\"success\",\"skipped\"]'), needs.deploy-bot-function.result) &&
+      contains(fromJson('["success","skipped"]'), needs.deploy-bot-function.result) &&
       contains(fromJson('["success","skipped"]'), needs.build-and-deploy-api.result) &&
       contains(fromJson('["success","skipped"]'), needs.build-and-deploy-ui.result)
     runs-on: ubuntu-latest
