@@ -512,7 +512,7 @@ resource "azurerm_linux_web_app" "bot" {
     "MicrosoftAppPassword"  = var.bot_app_password
     "MicrosoftAppType"      = "SingleTenant"
     "MicrosoftAppTenantId"  = data.azurerm_client_config.current.tenant_id
-    "APIM_CHAT_URL"         = "https://${data.azurerm_api_management.apim.gateway_url}/foundry-privatevnet-app/chat"
+    "APIM_CHAT_URL"         = "${data.azurerm_api_management.apim.gateway_url}/foundry-privatevnet-app/chat"
   }
 }
 
