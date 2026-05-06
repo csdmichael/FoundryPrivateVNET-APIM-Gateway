@@ -22,8 +22,6 @@ if (-not $SkipTerraform) {
 
     & "$PSScriptRoot\terraform-import-existing.ps1"
 
-    terraform state show -no-color azurerm_virtual_network.main | Out-Null
-
     terraform validate
 
     if ($DetailedPlan) {

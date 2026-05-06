@@ -3,7 +3,7 @@ output "resource_group_name" {
 }
 
 output "virtual_network_name" {
-  value = azurerm_virtual_network.main.name
+  value = data.azurerm_virtual_network.main.name
 }
 
 output "api_web_app_name" {

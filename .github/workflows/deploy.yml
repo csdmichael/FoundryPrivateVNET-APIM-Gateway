@@ -49,9 +49,6 @@ jobs:
       - name: Import existing Azure resources
         shell: pwsh
         run: ./scripts/terraform-import-existing.ps1
-      - name: Verify imported VNet state
-        shell: pwsh
-        run: terraform state show -no-color azurerm_virtual_network.main | Out-Null
       - name: Terraform validate
         run: terraform validate
       - name: Terraform plan

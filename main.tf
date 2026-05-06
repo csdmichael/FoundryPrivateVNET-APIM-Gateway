@@ -149,20 +149,19 @@ data "azurerm_service_plan" "bot" {
   resource_group_name = data.azurerm_resource_group.target.name
 }
 
+data "azurerm_virtual_network" "main" {
+  name                = "vnet-${var.name_prefix}-${replace(lower(var.location), " ", "")}"
+  resource_group_name = data.azurerm_resource_group.target.name
+}
+
 locals {
   deploy_web_apps = var.deploy_api || var.deploy_ui
   use_existing_app_service_plan = local.deploy_web_apps && var.existing_app_service_plan_name != null
   location_slug = replace(lower(var.location), " ", "")
-  vnet_name = "vnet-${var.name_prefix}-${local.location_slug}"
   service_plan_id = local.deploy_web_apps ? (local.use_existing_app_service_plan ? data.azurerm_service_plan.existing[0].id : azurerm_service_plan.main[0].id) : null
   web_app_location = local.deploy_web_apps ? (local.use_existing_app_service_plan ? data.azurerm_service_plan.existing[0].location : var.location) : null
   api_web_app_name = var.api_web_app_name != null ? var.api_web_app_name : azurecaf_name.api_web_app.result
   ui_web_app_name = var.ui_web_app_name != null ? var.ui_web_app_name : azurecaf_name.ui_web_app.result
-}
-
-import {
-  to = azurerm_virtual_network.main
-  id = "/subscriptions/${var.subscription_id}/resourceGroups/${data.azurerm_resource_group.target.name}/providers/Microsoft.Network/virtualNetworks/${local.vnet_name}"
 }
 
 resource "azurecaf_name" "app_service_plan" {
@@ -244,18 +243,10 @@ resource "azurerm_user_assigned_identity" "ui" {
   tags                = var.tags
 }
 
-resource "azurerm_virtual_network" "main" {
-  name                = azurecaf_name.vnet.result
-  location            = var.location
-  resource_group_name = data.azurerm_resource_group.target.name
-  address_space       = ["10.40.0.0/16"]
-  tags                = var.tags
-}
-
 resource "azurerm_subnet" "appsvc_integration" {
   name                 = "appsvc-integration"
   resource_group_name  = data.azurerm_resource_group.target.name
-  virtual_network_name = azurerm_virtual_network.main.name
+  virtual_network_name = data.azurerm_virtual_network.main.name
   address_prefixes     = ["10.40.1.0/24"]
 
   delegation {
@@ -273,7 +264,7 @@ resource "azurerm_subnet" "appsvc_integration" {
 resource "azurerm_subnet" "private_endpoints" {
   name                                      = "private-endpoints"
   resource_group_name                       = data.azurerm_resource_group.target.name
-  virtual_network_name                      = azurerm_virtual_network.main.name
+  virtual_network_name                      = data.azurerm_virtual_network.main.name
   address_prefixes                          = ["10.40.2.0/24"]
   service_endpoints                         = ["Microsoft.CognitiveServices"]
   private_endpoint_network_policies         = "Disabled"
@@ -300,7 +291,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "foundry" {
   name                  = "foundry-link"
   resource_group_name   = data.azurerm_resource_group.target.name
   private_dns_zone_name = azurerm_private_dns_zone.foundry.name
-  virtual_network_id    = azurerm_virtual_network.main.id
+  virtual_network_id    = data.azurerm_virtual_network.main.id
   registration_enabled  = false
   tags                  = var.tags
 }
@@ -309,7 +300,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "search" {
   name                  = "search-link"
   resource_group_name   = data.azurerm_resource_group.target.name
   private_dns_zone_name = azurerm_private_dns_zone.search.name
-  virtual_network_id    = azurerm_virtual_network.main.id
+  virtual_network_id    = data.azurerm_virtual_network.main.id
   registration_enabled  = false
   tags                  = var.tags
 }
