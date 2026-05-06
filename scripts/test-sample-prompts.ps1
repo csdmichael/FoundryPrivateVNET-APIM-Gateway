@@ -4,8 +4,9 @@ Set-Location $PSScriptRoot\..
 $config = Get-Content .\config\prompts_config.json | ConvertFrom-Json
 $azConfig = Get-Content .\config\azure_resources.json | ConvertFrom-Json
 $apiBase = if ($env:APP_API_BASE_URL) { $env:APP_API_BASE_URL.TrimEnd('/') } else { "$($azConfig.app_services.api_url)/api" }
+$useCaseKeys = @($azConfig.use_cases.PSObject.Properties.Name)
 
-foreach ($useCase in @('tax_pdf_forms', 'eng_design_ppt')) {
+foreach ($useCase in $useCaseKeys) {
     $prompt = $config.use_cases.$useCase.agent[0].text
     $body = @{
         prompt = $prompt

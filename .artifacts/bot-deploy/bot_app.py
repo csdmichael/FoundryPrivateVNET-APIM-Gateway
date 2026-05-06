@@ -1,7 +1,6 @@
-"""Bot Framework messaging endpoint for Teams agents.
+"""Bot Framework web app — receives Teams messages and proxies to APIM /chat.
 
-Receives messages from Teams via Bot Framework, calls the APIM /chat endpoint,
-and sends the response back to the user.
+Run with: gunicorn --bind=0.0.0.0 --timeout 600 -k aiohttp.GunicornWebWorker bot_app:app
 """
 
 import json
@@ -11,26 +10,32 @@ import re
 import sys
 from pathlib import Path
 
-import aiohttp
-import azure.functions as func
+import aiohttp as aiohttp_client
+from aiohttp import web
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
 from botbuilder.schema import Activity
 
-# Support both local dev (config/ is two levels up) and deployed (config/ alongside messages/)
-_msg_dir = Path(__file__).resolve().parent
-for _candidate in [_msg_dir.parent, _msg_dir.parents[1]]:
+# Support both local dev (config/ is one level up) and deployed (config/ alongside bot_app.py)
+_bot_dir = Path(__file__).resolve().parent
+for _candidate in [_bot_dir, _bot_dir.parent]:
     if (_candidate / "config" / "__init__.py").is_file() and str(_candidate) not in sys.path:
         sys.path.insert(0, str(_candidate))
         break
 
 import config
 
-APIM_CHAT_URL = os.environ.get("APIM_CHAT_URL") or config.apim_chat_url()
+APIM_CHAT_URL = os.environ.get(
+    "APIM_CHAT_URL",
+    "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/chat",
+)
 BOT_APP_ID = os.environ.get("MicrosoftAppId", "")
 BOT_APP_PASSWORD = os.environ.get("MicrosoftAppPassword", "")
 
 _settings = BotFrameworkAdapterSettings(BOT_APP_ID, BOT_APP_PASSWORD)
 _adapter = BotFrameworkAdapter(_settings)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def _normalize_words(text: str) -> set[str]:
@@ -81,14 +86,13 @@ def _infer_use_case(activity: Activity, prompt: str) -> str:
 
 
 async def _on_message(turn_context: TurnContext) -> None:
-    """Handle incoming message: call APIM /chat and reply."""
     user_text = _extract_prompt(turn_context.activity)
     if not user_text.strip():
         await turn_context.send_activity("Please send a question.")
         return
 
     use_case = _infer_use_case(turn_context.activity, user_text)
-    logging.info(
+    logger.info(
         "Received Teams bot message conversation_type=%s recipient=%s use_case=%s text=%s",
         getattr(turn_context.activity.conversation, "conversation_type", ""),
         getattr(turn_context.activity.recipient, "name", ""),
@@ -98,12 +102,12 @@ async def _on_message(turn_context: TurnContext) -> None:
 
     payload = {"prompt": user_text, "use_case": use_case}
     try:
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp_client.ClientSession() as session:
             async with session.post(
                 APIM_CHAT_URL,
                 json=payload,
                 headers={"Content-Type": "application/json"},
-                timeout=aiohttp.ClientTimeout(total=60),
+                timeout=aiohttp_client.ClientTimeout(total=60),
             ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
@@ -112,26 +116,33 @@ async def _on_message(turn_context: TurnContext) -> None:
                     body = await resp.text()
                     answer = f"Error from APIM ({resp.status}): {body[:500]}"
     except Exception as exc:
-        logging.exception("APIM call failed for use_case=%s", use_case)
+        logger.exception("APIM call failed for use_case=%s", use_case)
         answer = f"Failed to reach the agent: {exc}"
 
     await turn_context.send_activity(answer)
 
 
-async def main(req: func.HttpRequest) -> func.HttpResponse:
-    """Bot Framework webhook entry point."""
-    if req.method != "POST":
-        return func.HttpResponse(status_code=405)
+async def messages(req: web.Request) -> web.Response:
+    if req.content_type != "application/json":
+        return web.Response(status=415)
 
-    body = req.get_body().decode("utf-8")
-    activity = Activity().deserialize(json.loads(body))
+    body = await req.json()
+    activity = Activity().deserialize(body)
     auth_header = req.headers.get("Authorization", "")
 
     response = await _adapter.process_activity(activity, auth_header, _on_message)
     if response:
-        return func.HttpResponse(
-            body=json.dumps(response.body),
-            status_code=response.status,
-            headers={"Content-Type": "application/json"},
-        )
-    return func.HttpResponse(status_code=200)
+        return web.json_response(data=response.body, status=response.status)
+    return web.Response(status=200)
+
+
+async def health(req: web.Request) -> web.Response:
+    return web.json_response({"status": "ok"})
+
+
+app = web.Application()
+app.router.add_post("/api/messages", messages)
+app.router.add_get("/api/health", health)
+
+if __name__ == "__main__":
+    web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8080")))

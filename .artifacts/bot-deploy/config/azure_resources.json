@@ -1,0 +1,64 @@
+{
+  "subscription_id": "86b37969-9445-49cf-b03f-d8866235171c",
+  "resource_group": "ai-myaacoub",
+  "location": "eastus",
+  "app_services": {
+    "api_name": "foundry-privatevnet-api",
+    "ui_name": "foundry-privatevnet-ui",
+    "api_url": "https://foundry-privatevnet-api.azurewebsites.net",
+    "ui_url": "https://foundry-privatevnet-ui.azurewebsites.net"
+  },
+  "apim": {
+    "resource_id": "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.ApiManagement/service/ai-gateway-apim-poc-my",
+    "gateway_url": "https://ai-gateway-apim-poc-my.azure-api.net",
+    "api_path": "foundry-privatevnet-app",
+    "product_name": "foundry-privatevnet-product",
+    "backend_api_name": "foundry-privatevnet-app-api",
+    "foundry_api_name": "foundry-privatevnet-agent-gateway",
+    "foundry_agents_api_name": "foundry-agents-gateway",
+    "foundry_agents_api_path": "foundry-agents"
+  },
+  "search": {
+    "target_service_name": "aisearch-poc-myaacoub",
+    "target_resource_id": "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.Search/searchServices/aisearch-poc-myaacoub",
+    "source_service_name": "ai-search-my",
+    "source_resource_id": "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.Search/searchServices/ai-search-my",
+    "target_endpoint": "https://aisearch-poc-myaacoub.search.windows.net"
+  },
+  "foundry": {
+    "account_name": "002-ai-poc-private",
+    "account_resource_id": "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.CognitiveServices/accounts/002-ai-poc-private",
+    "project_endpoint": "https://002-ai-poc-private.services.ai.azure.com/api/projects/proj-default",
+    "source_project_endpoint": "https://001-ai-poc.services.ai.azure.com/api/projects/001-ai-proj",
+    "search_connection_name": "aisearchpocmyaacoub"
+  },
+  "cosmosdb": {
+    "account_name": "cosmos-ai-poc",
+    "endpoint": "https://cosmos-ai-poc.documents.azure.com:443/",
+    "resource_id": "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.DocumentDb/databaseAccounts/cosmos-ai-poc",
+    "database_name": "taxforms",
+    "container_name": "documents"
+  },
+  "use_cases": {
+    "tax_pdf_forms": {
+      "label": "Tax PDF Forms",
+      "agent_name": "Tax-PDF-Forms-Agent",
+      "apim_agent_path": "/foundry-privatevnet/agents/tax-pdf-forms/chat",
+      "search_assets": {
+        "data_source": "tax-pdf-forms-datasource",
+        "index": "tax-pdf-forms-index",
+        "indexer": "tax-pdf-forms-indexer"
+      }
+    },
+    "eng_design_ppt": {
+      "label": "Engineering Design PPT",
+      "agent_name": "Eng-Design-PPT-Agent",
+      "apim_agent_path": "/foundry-privatevnet/agents/eng-design-ppt/chat",
+      "search_assets": {
+        "data_source": "eng-design-ppt-datasource",
+        "index": "eng-design-ppt-index",
+        "indexer": "eng-design-ppt-indexer"
+      }
+    }
+  }
+}

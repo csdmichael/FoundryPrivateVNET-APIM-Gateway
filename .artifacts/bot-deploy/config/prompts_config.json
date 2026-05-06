@@ -1,0 +1,52 @@
+{
+  "use_cases": {
+    "tax_pdf_forms": {
+      "keyword": [
+        {"text": "Indiana expired exemption certificate", "category": "keyword"},
+        {"text": "West Virginia resale documentation", "category": "keyword"},
+        {"text": "California 501(c)(3) eligibility", "category": "keyword"}
+      ],
+      "semantic": [
+        {"text": "What renewal process is described in the Indiana tax exemption form?", "category": "semantic"},
+        {"text": "What documentation is required for a West Virginia resale certificate?", "category": "semantic"},
+        {"text": "What deadline is listed for the Alabama property tax exemption form?", "category": "semantic"}
+      ],
+      "agent": [
+        {"text": "In lq_tax_exemption_IN_001_yellow.pdf, what is the stated purpose of the Indiana tax exemption certificate and who is expected to use it?", "category": "agent"},
+        {"text": "List the purchaser or organization identification fields that must be completed on the Indiana tax exemption certificate.", "category": "agent"},
+        {"text": "What exemption reason categories or qualifying uses are described in the Indiana tax exemption certificate?", "category": "agent"},
+        {"text": "What instructions does the Indiana form give about how the seller should accept, keep, or rely on the certificate?", "category": "agent"},
+        {"text": "Does the Indiana tax exemption certificate mention an expiration, renewal, or reuse condition? Summarize the exact guidance.", "category": "agent"},
+        {"text": "What certifications, signature statements, or penalties are attached to signing the Indiana tax exemption certificate?", "category": "agent"},
+        {"text": "In lq_tax_exemption_WV_002_red.pdf, what is the buyer certifying when using the West Virginia resale certificate?", "category": "agent"},
+        {"text": "Which permit numbers, business identifiers, or registration details are requested on the West Virginia resale certificate?", "category": "agent"},
+        {"text": "What limitations does the West Virginia resale certificate place on when the form may or may not be used?", "category": "agent"},
+        {"text": "What recordkeeping expectations, seller responsibilities, or misuse warnings are stated in the West Virginia resale certificate?", "category": "agent"}
+      ]
+    },
+    "eng_design_ppt": {
+      "keyword": [
+        {"text": "slide summary design review", "category": "keyword"},
+        {"text": "project milestone architecture", "category": "keyword"},
+        {"text": "engineering decision tradeoff", "category": "keyword"}
+      ],
+      "semantic": [
+        {"text": "What architecture decisions are described in the engineering design presentations?", "category": "semantic"},
+        {"text": "Which risks or action items were called out in the design review decks?", "category": "semantic"},
+        {"text": "What performance requirements are emphasized across the presentations?", "category": "semantic"}
+      ],
+      "agent": [
+        {"text": "In engineering_design_review_001.pptx, summarize the problem statement, project goal, and design scope described in the opening slides.", "category": "agent"},
+        {"text": "What system components, layers, or services are shown in solution_architecture_update_002.pptx?", "category": "agent"},
+        {"text": "Which interfaces, data flows, or external integrations are called out between components in the architecture update deck?", "category": "agent"},
+        {"text": "What alternative design options or solution approaches are compared in engineering_design_review_001.pptx?", "category": "agent"},
+        {"text": "What trade-offs or decision criteria are used to justify the preferred design in the engineering presentations?", "category": "agent"},
+        {"text": "Which assumptions, constraints, or dependencies are explicitly listed in the engineering decks?", "category": "agent"},
+        {"text": "What risks, open issues, or unresolved questions are highlighted in engineering_design_review_001.pptx?", "category": "agent"},
+        {"text": "What implementation milestones, owners, or next steps are listed in solution_architecture_update_002.pptx?", "category": "agent"},
+        {"text": "Where do the decks mention performance, scalability, resiliency, or operational monitoring requirements?", "category": "agent"},
+        {"text": "Compare engineering_design_review_001.pptx with solution_architecture_update_002.pptx: what stayed the same, and what changed in the proposed architecture?", "category": "agent"}
+      ]
+    }
+  }
+}

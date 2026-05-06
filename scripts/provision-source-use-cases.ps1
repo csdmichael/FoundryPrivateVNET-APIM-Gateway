@@ -128,7 +128,8 @@ if ($AgentsOnly) {
     & "$PSScriptRoot\ensure-foundry-search-connection.ps1"
 }
 
-foreach ($useCase in @('tax_pdf_forms', 'eng_design_ppt')) {
+$useCaseKeys = @($config.use_cases.PSObject.Properties.Name)
+foreach ($useCase in $useCaseKeys) {
     $env:USE_CASE = $useCase
 
     if ($SearchOnly) {

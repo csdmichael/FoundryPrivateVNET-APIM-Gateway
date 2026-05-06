@@ -64,7 +64,7 @@ AGENT_INSTRUCTIONS = f"{AGENT_SETTINGS['instructions']}{_GROUNDING_SUFFIX}"
 def _connection_id() -> str:
     connection_name = os.environ.get(
         "AZURE_AI_SEARCH_CONNECTION_NAME",
-        AZURE_RESOURCES["foundry"].get("search_connection_name", "aisearchpocmyaacoub"),
+        AZURE_RESOURCES["foundry"]["search_connection_name"],
     ).strip()
     if os.environ.get("AZURE_AI_SEARCH_CONNECTION_ID", "").strip():
         return os.environ["AZURE_AI_SEARCH_CONNECTION_ID"].strip()

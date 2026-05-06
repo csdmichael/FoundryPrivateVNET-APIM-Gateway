@@ -15,16 +15,16 @@ from aiohttp import web
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
 from botbuilder.schema import Activity
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+# Support both local dev (config/ is one level up) and deployed (config/ alongside bot_app.py)
+_bot_dir = Path(__file__).resolve().parent
+for _candidate in [_bot_dir, _bot_dir.parent]:
+    if (_candidate / "config" / "__init__.py").is_file() and str(_candidate) not in sys.path:
+        sys.path.insert(0, str(_candidate))
+        break
 
 import config
 
-APIM_CHAT_URL = os.environ.get(
-    "APIM_CHAT_URL",
-    "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/chat",
-)
+APIM_CHAT_URL = os.environ.get("APIM_CHAT_URL") or config.apim_chat_url()
 BOT_APP_ID = os.environ.get("MicrosoftAppId", "")
 BOT_APP_PASSWORD = os.environ.get("MicrosoftAppPassword", "")
 

@@ -28,7 +28,7 @@ $tfvars          = Get-Content .\main.tfvars.json             | ConvertFrom-Json
 $projectEndpoint = $azureResources.foundry.project_endpoint
 $apimGatewayUrl  = $azureResources.apim.gateway_url
 $apimApiPath     = $azureResources.apim.api_path
-$githubBaseUrl   = "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs"
+$githubBaseUrl   = if ($env:GITHUB_DOCS_BASE_URL) { $env:GITHUB_DOCS_BASE_URL.TrimEnd('/') } else { "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs" }
 
 # Map use-case keys to package definitions
 $useCases = @{

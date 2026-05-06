@@ -1,0 +1,3 @@
+{
+  "notes": "This solution uses Cosmos DB-backed Search content and does not provision blob containers in Terraform."
+}
