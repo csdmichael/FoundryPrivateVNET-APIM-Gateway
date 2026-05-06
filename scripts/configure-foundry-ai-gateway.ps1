@@ -81,24 +81,30 @@ $policyXml = @"
 
 $policyPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-openai-gateway-policy.xml'
 $policyXml | Set-Content -Path $policyPath -Encoding UTF8
-az apim api policy create --resource-group $resourceGroup --service-name $apimName --api-id $apimApiId --xml-file $policyPath -o none
 
-$connectionUrl = "https://management.azure.com$foundryProjectResourceId/connections/$connectionName"
+$policyBodyPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-openai-gateway-policy.json'
+@{properties=@{format="rawxml"; value=$policyXml}} | ConvertTo-Json -Depth 5 | Set-Content -Path $policyBodyPath -Encoding UTF8
+az rest --method PUT --url "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.ApiManagement/service/$apimName/apis/$apimApiId/policies/policy?api-version=2024-05-01" --body "@$policyBodyPath" | Out-Null
+
+$connectionUrl = "https://management.azure.com$foundryProjectResourceId/connections/$connectionName?api-version=2025-04-01-preview"
 $connectionPayload = @{
     properties = @{
-        authType = 'None'
-        category = 'AzureOpenAI'
+    authType = 'ProjectManagedIdentity'
+    audience = 'https://cognitiveservices.azure.com'
+    category = 'ApiManagement'
+    credentials = @{}
+    isSharedToAll = $false
         target = $gatewayUrl
         metadata = @{
-            ApiType = 'Azure'
-            ResourceId = $apimResourceId
-            displayName = 'APIM AI Gateway'
+      deploymentInPath = 'true'
+      displayName = 'APIM AI Gateway'
+      inferenceAPIVersion = '2024-10-21'
         }
     }
 }
 
 $payloadPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-apim-gateway-connection.json'
 $connectionPayload | ConvertTo-Json -Depth 10 | Set-Content -Path $payloadPath -Encoding UTF8
-az rest --method put --headers Content-Type=application/json --url $connectionUrl --url-parameters "api-version=2025-06-01" --body "@$payloadPath" | Out-Null
+az rest --method put --headers Content-Type=application/json --url $connectionUrl --body "@$payloadPath" | Out-Null
 
 Write-Host "Ensured Foundry AI gateway via APIM: $gatewayUrl"
