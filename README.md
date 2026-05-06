@@ -1,17 +1,342 @@
 # Foundry Private VNET APIM Gateway
 
-This repository implements a private Azure AI Foundry deployment where Azure API Management is the AI Gateway and the primary control plane for client-to-agent traffic. The solution uses Terraform for infrastructure and APIM policies to proxy Teams agent requests directly to Foundry — no backend API app service required.
+This project demonstrates **Azure API Management as an AI Gateway** in front of a fully private Azure AI Foundry deployment. All Foundry and Azure AI Search traffic is locked inside a private Azure Virtual Network; APIM sits at the VNet boundary as the single policy-enforcement and routing plane for every client request.
 
-## Focus
+The primary case study is **publishing AI agents to Microsoft Teams**. Each Foundry agent is surfaced as a Teams API-based message extension. Users open the compose box in any Teams chat, type a question, and receive a grounded AI response — all routed through APIM to a private Foundry project, with no additional backend App Service required.
 
-The main design goal is to place APIM in front of Foundry so gateway concerns are handled centrally:
+## Why APIM as the AI Gateway
 
-- expose a single client-facing API surface for Teams agent packages
-- keep Foundry and Azure AI Search behind private networking and private DNS
-- apply APIM import, routing, product, policy, and subscription controls in one place
-- use APIM policies to transform and proxy requests to Foundry directly
+Traditional AI solutions add an intermediate API layer (FastAPI, Flask, App Service) between clients and the AI platform. This project removes that layer and puts APIM in that role:
+
+| Concern | How APIM handles it |
+|---------|---------------------|
+| Authentication | System-assigned managed identity with `Cognitive Services User` role on Foundry |
+| Request transformation | Policy rewrites flat `{"prompt": "..."}` into OpenAI chat completions format |
+| Response transformation | Policy flattens the completion back to `{"response": "..."}` for Teams adaptive cards |
+| Routing | Named backends per Foundry project, no extra DNS or reverse-proxy config |
+| Observability | APIM diagnostics to Log Analytics in one place |
+| Private networking | Backend URL points to Foundry private endpoint; APIM is the only public surface |
+
+## Architecture
 
 ![Architecture](docs/architecture.png)
+
+### Teams → Bot → APIM → Foundry data flow
+
+![Teams Bot APIM Foundry Agent Data Flow](docs/Teams-Bot-APIM-FoundryAgent.png)
+
+```mermaid
+sequenceDiagram
+    participant User as Teams User
+    participant Teams as Microsoft Teams
+    participant Bot as Azure Bot Service
+    participant BotApp as Bot Web App
+    participant APIM as Azure API Management
+    participant Foundry as Azure AI Foundry
+    participant Search as Azure AI Search
+
+    User->>Teams: Sends message
+    Teams->>Bot: Activity (HTTPS)
+    Bot->>BotApp: Forward activity
+    BotApp->>APIM: POST /foundry-privatevnet-app/chat<br/>Body: {"prompt": "..."}
+    APIM->>APIM: Transform to OpenAI format
+    APIM->>Foundry: POST /openai/deployments/gpt-4.1/<br/>chat/completions (managed identity)
+    Foundry->>Search: Query search index
+    Search-->>Foundry: Grounded chunks
+    Foundry-->>APIM: Chat completion
+    APIM->>APIM: Transform to {"response": "..."}
+    APIM-->>BotApp: Flat JSON
+    BotApp-->>Bot: Reply activity
+    Bot-->>Teams: Message
+    Teams-->>User: Displays answer
+```
+
+The API-based message extension path (compose box) is shorter — Teams calls APIM `/chat` directly and renders the response as an Adaptive Card, bypassing the Bot Service entirely.
+
+## Technologies Used
+
+| Technology | Role |
+|------------|------|
+| **Azure API Management** | AI Gateway — policy enforcement, auth, request/response transformation, routing |
+| **Azure AI Foundry** | Agent hosting, model inference (`gpt-4.1`), private endpoint access |
+| **Azure AI Search** | Grounding data store for both agents; Cosmos DB-backed indexers |
+| **Azure Cosmos DB** | Source document store for Search indexer content |
+| **Azure Bot Service** | Teams channel registration and activity relay |
+| **Azure Functions** (Python 3.11) | Bot application runtime (Linux consumption plan) |
+| **Microsoft Teams** | End-user chat interface via API-based message extensions |
+| **Terraform** | Infrastructure provisioning (VNet, private endpoints, DNS, APIM, bot) |
+| **Azure VNet + Private Endpoints** | Network isolation for Foundry and Search |
+| **Private DNS Zones** | Name resolution for private endpoints inside the VNet |
+| **GitHub Actions + OIDC** | CI/CD with federated credentials (no client secret) |
+| **PowerShell** | Deployment automation, APIM configuration, packaging, smoke tests |
+| **Python 3.11** | Bot function, provisioning scripts, test scripts |
+
+## Project File Structure
+
+```
+FoundryPrivateVNET-APIM-Gateway/
+├── main.tf                        # Terraform root — VNet, private endpoints, bot, optional App Services
+├── main.tfvars.json               # Terraform variable values (region, SKUs, resource names)
+├── outputs.tf                     # Terraform outputs
+│
+├── config/
+│   ├── __init__.py                # Python module — loads and caches all config JSON files
+│   ├── agent_config.json          # Foundry agent definitions (name, model, instructions)
+│   ├── azure_resources.json       # Central resource map (APIM, Foundry, Search, Cosmos, App Services)
+│   ├── document_config.json       # Sample document metadata for Search index seeding
+│   ├── prompts_config.json        # Sample prompts for smoke-testing each agent
+│   ├── search_config.json         # Search index and indexer names per use case
+│   └── storage_config.json        # Storage notes (Cosmos DB-backed, no blob containers)
+│
+├── openapi/
+│   └── foundry-privatevnet-app.openapi.json  # OpenAPI spec imported into APIM
+│
+├── Agent-Packages/
+│   ├── Tax-PDF-Forms-Agent/
+│   │   ├── manifest.json              # Teams app manifest (v1.19)
+│   │   ├── apiSpecificationFile.json  # OpenAPI spec → APIM /chat endpoint
+│   │   ├── color.png                  # 192×192 color icon
+│   │   ├── outline.png                # 32×32 outline icon
+│   │   └── Tax-PDF-Forms-Agent.zip    # Sideloadable Teams package
+│   └── Eng-Design-PPT-Agent/
+│       ├── manifest.json
+│       ├── apiSpecificationFile.json
+│       ├── color.png
+│       ├── outline.png
+│       └── Eng-Design-PPT-Agent.zip
+│
+├── bot-function/                  # Azure Function App — Bot Framework messaging endpoint
+├── bot-deploy.zip                 # Pre-built bot function deployment archive
+├── server.py                      # Optional local API server
+│
+├── scripts/
+│   ├── deploy.ps1                 # Main deployment orchestrator
+│   ├── configure-apim.ps1         # APIM API/product/policy setup
+│   ├── configure-foundry-ai-gateway.ps1  # Foundry OpenAI gateway APIM surface
+│   ├── ensure-foundry-search-connection.ps1
+│   ├── package-teams-agents.ps1   # Zips each Agent-Package folder
+│   ├── provision-source-use-cases.ps1    # Source-driven Search + Foundry agent provisioning
+│   ├── clone-search-assets.ps1    # Delegates to source-driven provisioning
+│   ├── clone-foundry-agents.ps1   # Delegates to source-driven provisioning
+│   └── test-sample-prompts.ps1    # APIM smoke tests
+│
+├── api/                           # Optional App Service API layer
+├── ui/                            # Optional App Service UI layer
+├── requirements.txt               # Python dependencies
+├── requirements-api.txt
+├── requirements-deploy.txt
+│
+└── docs/
+    ├── architecture.png           # Solution architecture diagram
+    ├── Teams-Bot-APIM-FoundryAgent.png  # End-to-end data flow diagram
+    ├── best-practices.md          # APIM + Foundry best practices
+    ├── Prompts.txt                # Demo prompts
+    └── Screenshots/               # Portal screenshots of APIM and Foundry gateway config
+```
+
+## Solution Overview
+
+The deployed topology is:
+
+- **Azure AI Foundry** project with private endpoint access (no public Foundry endpoint exposed)
+- **Azure AI Search** with private endpoint access, Cosmos DB-backed indexers
+- **Azure API Management** as the public gateway — imports the OpenAPI spec, applies policies, routes to Foundry via private link
+- **VNet** with dedicated subnets for APIM internal mode, private endpoints, and the bot function
+- **Private DNS zones** for Foundry and Search name resolution inside the VNet
+- **Azure Bot Service** + **Function App** for Teams chat channel (optional; API-based message extensions work without it)
+- **Log Analytics** for unified diagnostics
+
+## Use Cases
+
+Both agents are grounded on Cosmos DB-backed Azure AI Search indexes:
+
+| Agent | Search Index | Documents |
+|-------|-------------|-----------|
+| `Tax-PDF-Forms-Agent` | `tax-pdf-forms-index` | 388 |
+| `Eng-Design-PPT-Agent` | `eng-design-ppt-index` | 100 |
+
+- **Tax PDF Forms** — answers questions about US state tax exemption forms sourced from PDF content
+- **Engineering Design PPT** — answers questions about architecture decisions and milestones from engineering design presentations
+
+Both agents use `gpt-4.1` and are grounded exclusively through `azure_ai_search` (no web search).
+
+## Teams Agent Packages
+
+Each Foundry agent is published to Microsoft Teams as an API-based message extension. Users invoke the agent from the Teams compose box, send a question, and receive the agent's response — all routed through APIM with no bot registration required.
+
+### Package structure
+
+```
+Agent-Packages/
+├── Tax-PDF-Forms-Agent/
+│   ├── manifest.json              # Teams app manifest (v1.19)
+│   ├── apiSpecificationFile.json  # OpenAPI spec pointing to APIM /chat endpoint
+│   ├── color.png                  # 192x192 color icon
+│   ├── outline.png                # 32x32 outline icon (white + transparent)
+│   └── Tax-PDF-Forms-Agent.zip
+└── Eng-Design-PPT-Agent/
+    ├── manifest.json
+    ├── apiSpecificationFile.json
+    ├── color.png
+    ├── outline.png
+    └── Eng-Design-PPT-Agent.zip
+```
+
+### How it works
+
+Each package uses a `composeExtensions` entry with `composeExtensionType: "apiBased"`. Teams reads the bundled `apiSpecificationFile.json` (an OpenAPI spec) to know how to call the APIM `/chat` endpoint. When the user types a question in the compose box, Teams sends a POST to `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api/chat` with the `prompt` and `use_case`, and renders the response as an adaptive card.
+
+### Manifest fields
+
+Each `manifest.json` follows the [Teams manifest schema v1.19](https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json). Key fields to keep aligned with the deployment:
+
+| Field | Purpose | Current value |
+|-------|---------|---------------|
+| `id` | Unique app GUID | Differs per agent |
+| `developer.websiteUrl` | APIM gateway base URL | `https://ai-gateway-apim-poc-my.azure-api.net` |
+| `composeExtensions[].apiSpecificationFile` | Bundled OpenAPI spec | `apiSpecificationFile.json` |
+| `validDomains` | Allowed domain for API calls | `["ai-gateway-apim-poc-my.azure-api.net"]` |
+
+If you change the APIM service, update `developer.*Url`, `validDomains` in both manifests, and the `servers[].url` in both `apiSpecificationFile.json` files.
+
+### Icon requirements
+
+Teams enforces strict icon rules:
+
+| Icon | File | Size | Rules |
+|------|------|------|-------|
+| Color | `color.png` | 192x192 px | Full color, PNG format |
+| Outline | `outline.png` | 32x32 px | White and transparent only, PNG format |
+
+### Repackaging
+
+The packaging script zips each agent folder's `manifest.json`, `apiSpecificationFile.json`, `color.png`, and `outline.png` into a `.zip`:
+
+```powershell
+./scripts/package-teams-agents.ps1
+```
+
+This runs automatically during `./scripts/deploy.ps1` and the GitHub Actions `post-deploy` job. To skip packaging during local deployment, use `-SkipPackage`.
+
+### Publishing via Teams Developer Portal
+
+The [Teams Developer Portal](https://dev.teams.microsoft.com) lets you test and publish apps without tenant admin approval:
+
+1. Go to [https://dev.teams.microsoft.com](https://dev.teams.microsoft.com).
+2. Click **Apps** → **Import app**.
+3. Upload the `.zip` file (e.g. `Agent-Packages/Tax-PDF-Forms-Agent/Tax-PDF-Forms-Agent.zip`).
+4. The portal validates the manifest, icons, schema, and OpenAPI spec. Fix any errors before proceeding.
+5. Click **Preview in Teams** to install the app for yourself.
+6. In Teams, open the compose box in any chat, click the **...** (extensions) menu, and select the agent.
+7. Type your question — Teams calls the APIM `/chat` endpoint and shows the response.
+8. Repeat for `Eng-Design-PPT-Agent.zip`.
+
+This bypasses the Teams Admin Center approval flow and installs the app only for your account.
+
+### Publishing via VS Code
+
+Install the [Teams Toolkit](https://marketplace.visualstudio.com/items?itemName=TeamsDevApp.ms-teams-vscode-extension) extension for VS Code. It provides manifest validation, sideloading, and debugging directly from the editor:
+
+1. Install the extension from the VS Code Marketplace.
+2. Open the `Agent-Packages/<AgentName>` folder.
+3. Use **Teams Toolkit: Validate manifest** to check the manifest before uploading.
+4. Use **Teams Toolkit: Zip Teams Metadata Package** or run `./scripts/package-teams-agents.ps1`.
+5. Use **Teams Toolkit: Upload to Teams** to sideload the package for testing.
+
+### Common packaging errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `packageName` not defined | Deprecated field in manifest | Remove the `packageName` property |
+| Color icon wrong dimension | `color.png` is not 192x192 | Regenerate as 192x192 PNG |
+| Outline icon not transparent | `outline.png` has non-transparent background | Regenerate as 32x32, white on transparent PNG |
+| No Supported Products | Manifest has no `composeExtensions` or `staticTabs` | Add a `composeExtensions` entry with `composeExtensionType: "apiBased"` |
+| Unsupported schema type (arrays) | Request body uses array types | Flatten to simple string properties; use APIM policy to transform into arrays |
+| `apiResponseRenderingTemplateFile` not defined | Wrong manifest schema version | Use `devPreview` manifest version |
+| `previewCardTemplate` missing | Response template missing required field | Add `previewCardTemplate` with at least a `title` |
+
+## Bot Registration
+
+The Teams chat experience requires an Azure Bot Service registration backed by a Function App:
+
+| Resource | Value |
+|----------|-------|
+| Bot name | `foundry-privatevnet-bot` |
+| App ID | `37a8fd15-4b3c-4289-9e8c-19b65120b844` |
+| App type | SingleTenant |
+| Messaging endpoint | `https://func-fdryvnetgw-bot-eastus.azurewebsites.net/api/messages` |
+| Function App | `func-fdryvnetgw-bot-eastus` (Linux consumption, Python 3.11) |
+| Channel | Microsoft Teams |
+
+The bot function receives messages from Teams, extracts the user text, calls the APIM `/chat` endpoint, and replies with the response. The function code is in [bot-function/](bot-function/).
+
+All bot infrastructure (Function App, storage account, consumption plan, bot registration, Teams channel) is managed by Terraform and deployed automatically.
+
+### Bot app secret
+
+The bot app password is stored as a Terraform variable `bot_app_password`. Set it via environment variable:
+
+```powershell
+$env:TF_VAR_bot_app_password = "your-secret-here"
+terraform apply -var-file=main.tfvars.json
+```
+
+Or add `BOT_APP_PASSWORD` as a GitHub Actions secret and pass it in the workflow.
+
+## APIM Configuration
+
+> **Note:** All APIM paths below are deployed inside a private Azure VNet and are not reachable from the public internet. They are accessible only from resources connected to the same VNet or via VNet peering/VPN.
+
+The deployment configures three APIM surfaces:
+
+- **App backend API** at `{apim_gateway_url}/foundry-privatevnet-app` — imported from the OpenAPI spec, subscription-free
+- **Foundry OpenAI gateway** at `{apim_gateway_url}/002-ai-poc-private/openai` — proxies to the Foundry account with managed identity
+- **Teams chat endpoint** at `{apim_gateway_url}/foundry-privatevnet-app/chat` — APIM operation-level policy transforms flat `{prompt}` into OpenAI chat completions
+
+Replace `{apim_gateway_url}` with the value of `apim.gateway_url` from `config/azure_resources.json`.
+
+```powershell
+./scripts/configure-apim.ps1
+./scripts/configure-foundry-ai-gateway.ps1
+```
+
+### Chat operation policy
+
+The `/chat` operation on the `foundry-privatevnet-app` API uses an APIM policy that:
+
+1. Extracts the `prompt` field from the incoming `{"prompt": "..."}` request
+2. Rewrites the backend to `https://002-ai-poc-private.services.ai.azure.com/openai/deployments/gpt-4.1/chat/completions`
+3. Authenticates with Foundry using the APIM system-assigned managed identity (`Cognitive Services User`)
+4. Transforms the flat prompt into OpenAI chat format with system instructions
+5. Transforms the OpenAI response back to flat `{"response": "...", "use_case": "..."}` for the Teams adaptive card
+
+This eliminates the need for a backend API app service. The Teams message extension calls APIM directly, and APIM handles all Foundry communication.
+
+## AI Gateway Screenshots
+
+### Foundry AI Gateway list
+
+The Foundry Admin portal shows the `ai-gateway-apim-poc-my` gateway registered at the Foundry account level in the `eastus` region, linked to one resource and one project.
+
+![AI Gateway Config in Foundry](docs/Screenshots/01.%20AI%20Gateway%20Config%20in%20Foundry.png)
+
+### Foundry AI Gateway details
+
+Drilling into the gateway shows its basic configuration: region `eastus`, resource group `ai-myaacoub`, pricing tier `BasicV2`, and endpoint `https://ai-gateway-apim-poc-my.azure-api.net`. The `proj-default` project is listed with Gateway status **Enabled** and parent resource `002-ai-poc-private`.
+
+![AI Gateway config details in Foundry](docs/Screenshots/02.%20AI%20Gateway%20config%20details%20in%20Foundry.png)
+
+### APIM — Add Foundry API endpoint
+
+In the Azure Portal, the APIM service `ai-gateway-apim-poc-my` is configured with the `002-ai-poc-private` Azure AI Service API. Client compatibility is set to **OpenAI**, and the endpoint resolves to `https://ai-gateway-apim-poc-my.azure-api.net/002-ai-poc-private/openai`. The wizard automatically activates the APIM system-assigned managed identity and assigns the **Azure AI User** role on the selected Azure AI service.
+
+![API Management - Add Foundry API EndPoint](docs/Screenshots/03.%20API%20Management%20-%20Add%20Foundry%20API%20EndPoint.png)
+
+### APIM — Test Foundry API
+
+The APIM Test console shows the imported `002-ai-poc-private` API with all OpenAI-compatible operations (assistants, threads, runs, messages, vector stores). The screenshot demonstrates the "Returns a list of assistants" GET operation with the full request URL routed through the APIM gateway.
+
+![Test Foundry API in APIM](docs/Screenshots/04.%20Test%20Foundry%20API%20in%20APIM.png)
 
 ## Configuration
 
@@ -47,36 +372,6 @@ Defines the two Foundry agents provisioned into the private Foundry project:
 - `Eng-Design-PPT-Agent` — uses `gpt-4.1`, grounded on the engineering design PPT Search index
 
 > **Note:** All APIM and Foundry endpoints in `azure_resources.json` are deployed inside a private Azure VNet. They are not reachable from the public internet. Replace the values in `azure_resources.json` with your own resource details before deploying to a different environment.
-
-## Solution Overview
-
-The deployed topology is:
-
-- Azure AI Foundry project with private endpoint access
-- Azure AI Search with private endpoint access
-- Azure API Management as the public gateway and policy boundary (transforms flat prompts into OpenAI chat completions)
-- VNet with subnets for private endpoints
-- Private DNS zones for Foundry and Search
-- Log Analytics for diagnostics
-- Azure Bot Service registration for Teams chat experience
-
-## Included Assets
-
-- Terraform for VNet, subnets, private endpoints, private DNS, and diagnostics
-- APIM import spec in [openapi/foundry-privatevnet-app.openapi.json](openapi/foundry-privatevnet-app.openapi.json)
-- APIM operation-level policy that transforms flat `{prompt}` into OpenAI chat completions
-- PowerShell automation for deployment, APIM configuration, source-driven private Search and agent provisioning, Teams packaging, and prompt smoke tests
-- Teams agent packages with API-based message extensions and bot registration
-- best-practices guidance in [docs/best-practices.md](docs/best-practices.md)
-
-## Use Cases
-
-The repo retains only the two Cosmos DB-backed use cases, and they are intentionally brief here because the repo focus is the APIM-to-Foundry gateway pattern rather than the business domain payloads.
-
-- Tax PDF Forms: a Cosmos DB-backed corpus of PDF tax form content exposed through Azure AI Search and served by `Tax-PDF-Forms-Agent`
-- Engineering Design PPT: a Cosmos DB-backed corpus of presentation content exposed through Azure AI Search and served by `Eng-Design-PPT-Agent`
-
-The previous non-Cosmos use cases were removed from the active documentation surface.
 
 ## Deployment
 
@@ -169,199 +464,6 @@ Notes:
 - That Search managed identity must have Cosmos DB account reader plus Cosmos SQL data access on `cosmos-ai-poc`.
 - The private Search service must have an approved shared private link to `cosmos-ai-poc` named `cosmos-ai-poc-sql` before Cosmos-backed Search indexers can populate data.
 
-## APIM Configuration
-
-> **Note:** All APIM paths below are deployed inside a private Azure VNet and are not reachable from the public internet. They are accessible only from resources connected to the same VNet or via VNet peering/VPN.
-
-The deployment configures three APIM surfaces:
-
-- **App backend API** at `{apim_gateway_url}/foundry-privatevnet-app` — imported from the OpenAPI spec, subscription-free
-- **Foundry OpenAI gateway** at `{apim_gateway_url}/002-ai-poc-private/openai` — proxies to the Foundry account with managed identity
-- **Teams chat endpoint** at `{apim_gateway_url}/foundry-privatevnet-app/chat` — APIM operation-level policy transforms flat `{prompt}` into OpenAI chat completions
-
-Replace `{apim_gateway_url}` with the value of `apim.gateway_url` from `config/azure_resources.json`.
-
-```powershell
-./scripts/configure-apim.ps1
-./scripts/configure-foundry-ai-gateway.ps1
-```
-
-### Chat operation policy
-
-The `/chat` operation on the `foundry-privatevnet-app` API uses an APIM policy that:
-
-1. Extracts the `prompt` field from the incoming `{"prompt": "..."}` request
-2. Rewrites the backend to `https://002-ai-poc-private.services.ai.azure.com/openai/deployments/gpt-4.1/chat/completions`
-3. Authenticates with Foundry using the APIM system-assigned managed identity (`Cognitive Services User`)
-4. Transforms the flat prompt into OpenAI chat format with system instructions
-5. Transforms the OpenAI response back to flat `{"response": "...", "use_case": "..."}` for the Teams adaptive card
-
-This eliminates the need for a backend API app service. The Teams message extension calls APIM directly, and APIM handles all Foundry communication.
-
-## AI Gateway Screenshots
-
-### Foundry AI Gateway list
-
-The Foundry Admin portal shows the `ai-gateway-apim-poc-my` gateway registered at the Foundry account level in the `eastus` region, linked to one resource and one project.
-
-![AI Gateway Config in Foundry](docs/Screenshots/01.%20AI%20Gateway%20Config%20in%20Foundry.png)
-
-### Foundry AI Gateway details
-
-Drilling into the gateway shows its basic configuration: region `eastus`, resource group `ai-myaacoub`, pricing tier `BasicV2`, and endpoint `https://ai-gateway-apim-poc-my.azure-api.net`. The `proj-default` project is listed with Gateway status **Enabled** and parent resource `002-ai-poc-private`.
-
-![AI Gateway config details in Foundry](docs/Screenshots/02.%20AI%20Gateway%20config%20details%20in%20Foundry.png)
-
-### APIM — Add Foundry API endpoint
-
-In the Azure Portal, the APIM service `ai-gateway-apim-poc-my` is configured with the `002-ai-poc-private` Azure AI Service API. Client compatibility is set to **OpenAI**, and the endpoint resolves to `https://ai-gateway-apim-poc-my.azure-api.net/002-ai-poc-private/openai`. The wizard automatically activates the APIM system-assigned managed identity and assigns the **Azure AI User** role on the selected Azure AI service.
-
-![API Management - Add Foundry API EndPoint](docs/Screenshots/03.%20API%20Management%20-%20Add%20Foundry%20API%20EndPoint.png)
-
-### APIM — Test Foundry API
-
-The APIM Test console shows the imported `002-ai-poc-private` API with all OpenAI-compatible operations (assistants, threads, runs, messages, vector stores). The screenshot demonstrates the "Returns a list of assistants" GET operation with the full request URL routed through the APIM gateway.
-
-![Test Foundry API in APIM](docs/Screenshots/04.%20Test%20Foundry%20API%20in%20APIM.png)
-
-## Teams Agent Packages
-
-Each Foundry agent is published to Microsoft Teams as an API-based message extension. Users invoke the agent from the Teams compose box, send a question, and receive the agent's response — all routed through APIM with no bot registration required.
-
-### Package structure
-
-```
-Agent-Packages/
-├── Tax-PDF-Forms-Agent/
-│   ├── manifest.json              # Teams app manifest (v1.19)
-│   ├── apiSpecificationFile.json  # OpenAPI spec pointing to APIM /chat endpoint
-│   ├── color.png                  # 192x192 color icon
-│   ├── outline.png                # 32x32 outline icon (white + transparent)
-│   └── Tax-PDF-Forms-Agent.zip
-└── Eng-Design-PPT-Agent/
-    ├── manifest.json
-    ├── apiSpecificationFile.json
-    ├── color.png
-    ├── outline.png
-    └── Eng-Design-PPT-Agent.zip
-```
-
-### How it works
-
-Each package uses a `composeExtensions` entry with `composeExtensionType: "apiBased"`. Teams reads the bundled `apiSpecificationFile.json` (an OpenAPI spec) to know how to call the APIM `/chat` endpoint. When the user types a question in the compose box, Teams sends a POST to `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api/chat` with the `prompt` and `use_case`, and renders the response as an adaptive card.
-
-### Manifest fields
-
-Each `manifest.json` follows the [Teams manifest schema v1.19](https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json). Key fields to keep aligned with the deployment:
-
-| Field | Purpose | Current value |
-|-------|---------|---------------|
-| `id` | Unique app GUID | Differs per agent |
-| `developer.websiteUrl` | APIM gateway base URL | `https://ai-gateway-apim-poc-my.azure-api.net` |
-| `composeExtensions[].apiSpecificationFile` | Bundled OpenAPI spec | `apiSpecificationFile.json` |
-| `validDomains` | Allowed domain for API calls | `["ai-gateway-apim-poc-my.azure-api.net"]` |
-
-If you change the APIM service, update `developer.*Url`, `validDomains` in both manifests, and the `servers[].url` in both `apiSpecificationFile.json` files.
-
-### Icon requirements
-
-Teams enforces strict icon rules:
-
-| Icon | File | Size | Rules |
-|------|------|------|-------|
-| Color | `color.png` | 192x192 px | Full color, PNG format |
-| Outline | `outline.png` | 32x32 px | White and transparent only, PNG format |
-
-### Repackaging
-
-The packaging script zips each agent folder's `manifest.json`, `apiSpecificationFile.json`, `color.png`, and `outline.png` into a `.zip`:
-
-```powershell
-./scripts/package-teams-agents.ps1
-```
-
-This runs automatically during `./scripts/deploy.ps1` and the GitHub Actions `post-deploy` job. To skip packaging during local deployment, use `-SkipPackage`.
-
-### Publishing via Teams Developer Portal
-
-The [Teams Developer Portal](https://dev.teams.microsoft.com) lets you test and publish apps without tenant admin approval:
-
-1. Go to [https://dev.teams.microsoft.com](https://dev.teams.microsoft.com).
-2. Click **Apps** → **Import app**.
-3. Upload the `.zip` file (e.g. `Agent-Packages/Tax-PDF-Forms-Agent/Tax-PDF-Forms-Agent.zip`).
-4. The portal validates the manifest, icons, schema, and OpenAPI spec. Fix any errors before proceeding.
-5. Click **Preview in Teams** to install the app for yourself.
-6. In Teams, open the compose box in any chat, click the **...** (extensions) menu, and select the agent.
-7. Type your question — Teams calls the APIM `/chat` endpoint and shows the response.
-8. Repeat for `Eng-Design-PPT-Agent.zip`.
-
-This bypasses the Teams Admin Center approval flow and installs the app only for your account.
-
-### Publishing via VS Code
-
-Install the [Teams Toolkit](https://marketplace.visualstudio.com/items?itemName=TeamsDevApp.ms-teams-vscode-extension) extension for VS Code. It provides manifest validation, sideloading, and debugging directly from the editor:
-
-1. Install the extension from the VS Code Marketplace.
-2. Open the `Agent-Packages/<AgentName>` folder.
-3. Use **Teams Toolkit: Validate manifest** to check the manifest before uploading.
-4. Use **Teams Toolkit: Zip Teams Metadata Package** or run `./scripts/package-teams-agents.ps1`.
-5. Use **Teams Toolkit: Upload to Teams** to sideload the package for testing.
-
-### Data flow: Teams → Bot → APIM → Foundry Agent
-
-The full request/response path for Teams chat uses the Bot Framework, APIM gateway policies, and Foundry private endpoints:
-
-![Teams Bot APIM Foundry Agent Data Flow](docs/Teams-Bot-APIM-FoundryAgent.png)
-
-**Flow steps:**
-
-1. User sends a message in Microsoft Teams (chat, channel, or personal app)
-2. Azure Bot Service receives and normalizes the message via Entra ID authentication
-3. Bot App (web app) processes the message using Bot Framework SDK and calls APIM
-4. APIM validates, transforms the flat `{prompt}` into OpenAI chat format, and routes to Foundry via Private Link
-5. Foundry Agent calls the model (gpt-4.1) for inference via Private Link, grounded by Azure AI Search
-6. Response returns from Foundry → APIM (transforms to flat JSON) → Bot App → Bot Service → Teams
-
-The compose extension path is similar but bypasses the Bot Service: Teams calls APIM `/chat` directly with a flat `{prompt}` request and renders the response as an Adaptive Card.
-
-```mermaid
-sequenceDiagram
-    participant User as Teams User
-    participant Teams as Microsoft Teams
-    participant Bot as Azure Bot Service
-    participant BotApp as Bot Web App
-    participant APIM as Azure API Management
-    participant Foundry as Azure AI Foundry
-    participant Search as Azure AI Search
-
-    User->>Teams: Sends message
-    Teams->>Bot: Activity (HTTPS)
-    Bot->>BotApp: Forward activity
-    BotApp->>APIM: POST /foundry-privatevnet-app/chat<br/>Body: {"prompt": "..."}
-    APIM->>APIM: Transform to OpenAI format
-    APIM->>Foundry: POST /openai/deployments/gpt-4.1/<br/>chat/completions (managed identity)
-    Foundry->>Search: Query search index
-    Search-->>Foundry: Grounded chunks
-    Foundry-->>APIM: Chat completion
-    APIM->>APIM: Transform to {"response": "..."}
-    APIM-->>BotApp: Flat JSON
-    BotApp-->>Bot: Reply activity
-    Bot-->>Teams: Message
-    Teams-->>User: Displays answer
-```
-
-### Common packaging errors
-
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `packageName` not defined | Deprecated field in manifest | Remove the `packageName` property |
-| Color icon wrong dimension | `color.png` is not 192x192 | Regenerate as 192x192 PNG |
-| Outline icon not transparent | `outline.png` has non-transparent background | Regenerate as 32x32, white on transparent PNG |
-| No Supported Products | Manifest has no `composeExtensions` or `staticTabs` | Add a `composeExtensions` entry with `composeExtensionType: "apiBased"` |
-| Unsupported schema type (arrays) | Request body uses array types | Flatten to simple string properties; use APIM policy to transform into arrays |
-| `apiResponseRenderingTemplateFile` not defined | Wrong manifest schema version | Use `devPreview` manifest version |
-| `previewCardTemplate` missing | Response template missing required field | Add `previewCardTemplate` with at least a `title` |
-
 ## Source-Driven Search And Agent Provisioning
 
 The deployment no longer clones live Azure Search objects or live Foundry agents from the source environment.
@@ -414,34 +516,6 @@ Invoke-RestMethod -Method Post -Uri "$apimBase/foundry-privatevnet-app/chat" -Co
 
 5. Use prompts from [docs/Prompts.txt](docs/Prompts.txt) to demo both agents.
 6. Show the generated Teams packages under `Agent-Packages/`.
-
-## Bot Registration
-
-The Teams chat experience requires an Azure Bot Service registration backed by a Function App:
-
-| Resource | Value |
-|----------|-------|
-| Bot name | `foundry-privatevnet-bot` |
-| App ID | `37a8fd15-4b3c-4289-9e8c-19b65120b844` |
-| App type | SingleTenant |
-| Messaging endpoint | `https://func-fdryvnetgw-bot-eastus.azurewebsites.net/api/messages` |
-| Function App | `func-fdryvnetgw-bot-eastus` (Linux consumption, Python 3.11) |
-| Channel | Microsoft Teams |
-
-The bot function receives messages from Teams, extracts the user text, calls the APIM `/chat` endpoint, and replies with the response. The function code is in [bot-function/](bot-function/).
-
-All bot infrastructure (Function App, storage account, consumption plan, bot registration, Teams channel) is managed by Terraform and deployed automatically.
-
-### Bot app secret
-
-The bot app password is stored as a Terraform variable `bot_app_password`. Set it via environment variable:
-
-```powershell
-$env:TF_VAR_bot_app_password = "your-secret-here"
-terraform apply -var-file=main.tfvars.json
-```
-
-Or add `BOT_APP_PASSWORD` as a GitHub Actions secret and pass it in the workflow.
 
 ## Sample Prompts and Testing
 
