@@ -153,10 +153,16 @@ locals {
   deploy_web_apps = var.deploy_api || var.deploy_ui
   use_existing_app_service_plan = local.deploy_web_apps && var.existing_app_service_plan_name != null
   location_slug = replace(lower(var.location), " ", "")
+  vnet_name = "vnet-${var.name_prefix}-${local.location_slug}"
   service_plan_id = local.deploy_web_apps ? (local.use_existing_app_service_plan ? data.azurerm_service_plan.existing[0].id : azurerm_service_plan.main[0].id) : null
   web_app_location = local.deploy_web_apps ? (local.use_existing_app_service_plan ? data.azurerm_service_plan.existing[0].location : var.location) : null
   api_web_app_name = var.api_web_app_name != null ? var.api_web_app_name : azurecaf_name.api_web_app.result
   ui_web_app_name = var.ui_web_app_name != null ? var.ui_web_app_name : azurecaf_name.ui_web_app.result
+}
+
+import {
+  to = azurerm_virtual_network.main
+  id = "/subscriptions/${var.subscription_id}/resourceGroups/${data.azurerm_resource_group.target.name}/providers/Microsoft.Network/virtualNetworks/${local.vnet_name}"
 }
 
 resource "azurecaf_name" "app_service_plan" {
