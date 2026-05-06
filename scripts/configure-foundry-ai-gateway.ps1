@@ -81,9 +81,9 @@ $policyXml = @"
 
 $policyPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-openai-gateway-policy.xml'
 $policyXml | Set-Content -Path $policyPath -Encoding UTF8
-az apim api policy update --resource-group $resourceGroup --service-name $apimName --api-id $apimApiId --xml-file $policyPath -o none
+az apim api policy create --resource-group $resourceGroup --service-name $apimName --api-id $apimApiId --xml-file $policyPath -o none
 
-$connectionUrl = "https://management.azure.com$foundryProjectResourceId/connections/$connectionName?api-version=2025-06-01"
+$connectionUrl = "https://management.azure.com$foundryProjectResourceId/connections/$connectionName"
 $connectionPayload = @{
     properties = @{
         authType = 'None'
@@ -99,6 +99,6 @@ $connectionPayload = @{
 
 $payloadPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-apim-gateway-connection.json'
 $connectionPayload | ConvertTo-Json -Depth 10 | Set-Content -Path $payloadPath -Encoding UTF8
-az rest --method put --headers Content-Type=application/json --url $connectionUrl --body "@$payloadPath" | Out-Null
+az rest --method put --headers Content-Type=application/json --url $connectionUrl --url-parameters "api-version=2025-06-01" --body "@$payloadPath" | Out-Null
 
 Write-Host "Ensured Foundry AI gateway via APIM: $gatewayUrl"
