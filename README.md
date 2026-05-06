@@ -447,7 +447,7 @@ Federated credentials configured on that identity:
 Azure RBAC granted to that identity:
 
 - `Contributor` on resource group `ai-myaacoub`
-- `Azure AI Developer` on `002-ai-poc-private`
+- `Azure AI User` on `002-ai-poc-private` is required for Foundry agent provisioning data-plane operations
 - `Azure AI Developer` on `001-ai-poc`
 - `Search Service Contributor` on `aisearch-poc-myaacoub`
 
@@ -488,6 +488,7 @@ Notes:
 - The workflows still use a single Terraform configuration and a branch-scoped OIDC credential for `main`.
 - API and UI GitHub Actions deployments are currently disabled, so App Service changes for those components are not deployed through the active workflow set.
 - Docs-only updates are ignored by deployment workflows.
+- Agent provisioning requires the current deployment principal to have `Azure AI User` on the target Foundry account. The provisioning script now checks and assigns that role automatically when the principal has Azure role-assignment permission.
 - Post-deploy provisioning is self-contained in this repo and no longer clones or patches the external `AI-Search-Blob-Storage` repository at deployment time.
 - The private Foundry project uses the `aisearchpocmyaacoub` Azure AI Search connection created by `scripts/ensure-foundry-search-connection.ps1`.
 - The private Search service must have a system-assigned managed identity enabled.
