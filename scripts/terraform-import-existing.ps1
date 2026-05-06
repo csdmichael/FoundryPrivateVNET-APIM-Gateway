@@ -162,27 +162,41 @@ foreach ($import in $imports) {
     }
 
     Write-Host "Importing $address"
-    # Run import and capture only exit code reliably
-    $importOutput = @()
-    & terraform import '-var-file=main.tfvars.json' $address $resourceId *>&1 | ForEach-Object { $importOutput += $_; Write-Host "  $_" }
-    $importExitCode = $LASTEXITCODE
-    if ($importExitCode -ne 0) {
-        # Check if the resource genuinely doesn't exist in Azure
-        $stateCheck = @(terraform state list 2>$null)
-        if ($stateCheck -contains $address) {
-            Write-Host "  Import recovered: $address is now in state"
+    # Capture output to a temp file so piping doesn't mask the exit code
+    $importTempFile = [System.IO.Path]::GetTempFileName()
+    try {
+        & terraform import '-var-file=main.tfvars.json' $address $resourceId *> $importTempFile
+        $importExitCode = $LASTEXITCODE
+        $importText = Get-Content $importTempFile -Raw -ErrorAction SilentlyContinue
+        if ($importText) { $importText.TrimEnd() -split "`n" | ForEach-Object { Write-Host "  $_" } }
+    }
+    finally {
+        Remove-Item $importTempFile -Force -ErrorAction SilentlyContinue
+    }
+
+    # Always verify state after import — exit code can be unreliable through pipelines
+    $stateCheck = @(terraform state list 2>$null)
+    if ($stateCheck -contains $address) {
+        if ($importExitCode -ne 0) {
+            Write-Host "  Import reported errors but resource is in state: $address"
         }
         else {
-            $importText = $importOutput -join "`n"
-            if ($importText -match 'non-existent remote object|no object exists with the given id') {
-                Write-Host "  Resource does not exist in Azure, skipping import (will be created by apply): $address"
-                continue
-            }
+            Write-Host "  Imported: $address"
+        }
+    }
+    else {
+        # Resource not in state — determine why
+        if ($importText -and $importText -match 'non-existent remote object|no object exists with the given id') {
+            Write-Host "  Resource does not exist in Azure, skipping (will be created by apply): $address"
+        }
+        elseif ($importExitCode -eq 0 -and (-not $importText -or $importText -notmatch 'Error')) {
+            Write-Host "  WARNING: import returned success but resource not in state: $address"
+        }
+        else {
             $ErrorActionPreference = $prevErrorPref
             throw "terraform import failed for $address (exit code $importExitCode)"
         }
     }
-}
 
 $ErrorActionPreference = $prevErrorPref
 

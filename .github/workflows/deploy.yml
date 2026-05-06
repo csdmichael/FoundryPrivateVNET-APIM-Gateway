@@ -3,6 +3,11 @@ name: deploy
 on:
   workflow_dispatch:
     inputs:
+      deploy_bot:
+        description: Deploy the bot function app
+        required: true
+        type: boolean
+        default: true
       deploy_api:
         description: Deploy the API web app
         required: true
@@ -55,7 +60,9 @@ jobs:
 
   deploy-bot-function:
     needs: terraform
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name != 'workflow_dispatch' || inputs.deploy_bot)
     runs-on: ubuntu-latest
     permissions:
       id-token: write
