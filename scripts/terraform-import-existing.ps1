@@ -80,7 +80,10 @@ $imports = @(
     @{ Address = 'azurerm_private_dns_zone_virtual_network_link.foundry'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Network/privateDnsZones/privatelink.services.ai.azure.com/virtualNetworkLinks/foundry-link" },
     @{ Address = 'azurerm_private_dns_zone_virtual_network_link.search'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Network/privateDnsZones/privatelink.search.windows.net/virtualNetworkLinks/search-link" },
     @{ Address = 'azurerm_private_endpoint.foundry'; Id = $foundryPrivateEndpointId },
-    @{ Address = 'azurerm_private_endpoint.search'; Id = $searchPrivateEndpointId }
+    @{ Address = 'azurerm_private_endpoint.search'; Id = $searchPrivateEndpointId },
+    @{ Address = 'azurerm_linux_web_app.bot'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/func-${namePrefix}-bot-$locationSlug" },
+    @{ Address = 'azapi_resource.bot_registration'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.BotService/botServices/foundry-privatevnet-bot" },
+    @{ Address = 'azapi_resource.bot_teams_channel'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.BotService/botServices/foundry-privatevnet-bot/channels/MsTeamsChannel" }
 )
 
 if ($deployApi) {
@@ -180,7 +183,8 @@ $ErrorActionPreference = $prevErrorPref
 $finalState = @(terraform state list 2>$null)
 $requiredAddresses = @(
     'azurerm_virtual_network.main',
-    'azurerm_subnet.private_endpoints'
+    'azurerm_subnet.private_endpoints',
+    'azurerm_linux_web_app.bot'
 )
 foreach ($required in $requiredAddresses) {
     if ($finalState -notcontains $required) {
