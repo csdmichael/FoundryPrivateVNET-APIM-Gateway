@@ -469,7 +469,7 @@ Current workflow split:
 - `deploy-infra.yml` for Terraform and resource import changes
 - `deploy-bot.yml` for the bot function app
 - `configure-platform.yml` for APIM and Foundry AI gateway configuration
-- `provision-search-agents.yml` for Search asset and Foundry agent provisioning
+- `provision-search-agents.yml` for two-phase Search asset provisioning followed by Foundry agent provisioning
 - `package-teams-agents.yml` for Teams package zips
 
 The API and UI deployment workflows are currently disabled.
@@ -489,6 +489,7 @@ Notes:
 - API and UI GitHub Actions deployments are currently disabled, so App Service changes for those components are not deployed through the active workflow set.
 - Docs-only updates are ignored by deployment workflows.
 - Agent provisioning requires the current deployment principal to have `Azure AI User` on the target Foundry account. In CI, the provisioning workflow treats that as a prerequisite and does not attempt self-assignment. For local privileged runs, set `AUTO_ASSIGN_FOUNDRY_ROLE=true` to let the script try the role assignment automatically.
+- The `provision-search-agents.yml` workflow runs Search provisioning first and agent provisioning second, so missing Foundry RBAC no longer prevents Search assets from being refreshed.
 - Post-deploy provisioning is self-contained in this repo and no longer clones or patches the external `AI-Search-Blob-Storage` repository at deployment time.
 - The private Foundry project uses the `aisearchpocmyaacoub` Azure AI Search connection created by `scripts/ensure-foundry-search-connection.ps1`.
 - The private Search service must have a system-assigned managed identity enabled.

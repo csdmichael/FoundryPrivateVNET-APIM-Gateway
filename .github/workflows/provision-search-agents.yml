@@ -36,8 +36,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-deploy.txt
-      - name: Provision private Search and agents from source repo
+      - name: Provision private Search assets from source repo
         shell: pwsh
         env:
           AUTO_ASSIGN_FOUNDRY_ROLE: 'false'
-        run: ./scripts/provision-source-use-cases.ps1
+        run: ./scripts/provision-source-use-cases.ps1 -SearchOnly
+      - name: Provision Foundry agents from source repo
+        shell: pwsh
+        env:
+          AUTO_ASSIGN_FOUNDRY_ROLE: 'false'
+        run: ./scripts/provision-source-use-cases.ps1 -AgentsOnly
