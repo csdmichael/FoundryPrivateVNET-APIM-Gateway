@@ -2,7 +2,7 @@
     "openapi":  "3.0.1",
     "info":  {
                  "title":  "Tax PDF Forms Agent",
-                 "version":  "1.0.4",
+                 "version":  "1.0.5",
                  "description":  "Chat with the Tax PDF Forms agent via Azure API Management and a private Azure AI Foundry deployment.",
                  "contact":  {
                                  "name":  "Foundry Private VNET APIM Gateway",

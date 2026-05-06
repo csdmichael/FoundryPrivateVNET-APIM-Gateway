@@ -89,12 +89,17 @@ if (-not $PackageOnly) {
         Write-Host "Endpoint (via APIM): $agentEndpoint"
     }
 
-    $token = az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv
-    if ($LASTEXITCODE -ne 0) { throw "Failed to get Azure access token. Run 'az login' first." }
+    # When routing via APIM, managed identity handles Foundry auth — no caller token needed.
+    # When calling Foundry directly, a bearer token with audience https://ai.azure.com is required.
+    $headers = @{ 'Content-Type' = 'application/json' }
+    if ($useDirect) {
+        $token = az account get-access-token --resource https://ai.azure.com --query accessToken -o tsv
+        if ($LASTEXITCODE -ne 0) { throw "Failed to get Azure access token. Run 'az login' first." }
+        $headers['Authorization'] = "Bearer $token"
+    }
 
     # List agents via Foundry Assistants REST API
     $listUrl = "$agentEndpoint/assistants?api-version=2025-05-01"
-    $headers = @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/json' }
 
     Write-Host "Fetching agent list..."
     $response = Invoke-RestMethod -Uri $listUrl -Headers $headers -Method Get

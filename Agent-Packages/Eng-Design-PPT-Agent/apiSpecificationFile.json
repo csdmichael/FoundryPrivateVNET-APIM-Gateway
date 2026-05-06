@@ -2,7 +2,7 @@
     "openapi":  "3.0.1",
     "info":  {
                  "title":  "Engineering Design PPT Agent",
-                 "version":  "1.0.4",
+                 "version":  "1.0.5",
                  "description":  "Chat with the Engineering Design PPT agent via Azure API Management and a private Azure AI Foundry deployment.",
                  "contact":  {
                                  "name":  "Foundry Private VNET APIM Gateway",
