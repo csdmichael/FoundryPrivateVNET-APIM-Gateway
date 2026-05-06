@@ -2,8 +2,38 @@
   "openapi": "3.0.1",
   "info": {
     "title": "Tax PDF Forms Agent",
-    "version": "1.0.0",
-    "description": "Chat with the Tax PDF Forms agent via APIM"
+    "version": "1.0.1",
+    "description": "Chat with the Tax PDF Forms agent via Azure API Management and a private Azure AI Foundry deployment.",
+    "contact": {
+      "name": "Foundry Private VNET APIM Gateway",
+      "url": "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs/support.md"
+    }
+  },
+  "x-security-controls": {
+    "rateLimiting": {
+      "strategy": "Handled by Azure API Management policies and upstream gateway throttling.",
+      "ipBasedThrottling": true,
+      "subscriptionOrUserRateLimits": true,
+      "spikeArrest": true,
+      "payloadSizeLimitKb": 64,
+      "accountRecoveryThresholds": {
+        "maxAttempts": 5,
+        "windowSeconds": 300
+      }
+    },
+    "inputValidation": {
+      "strategy": "The API accepts a single prompt field and rejects malformed payloads through APIM policy and backend validation.",
+      "contentTypeEnforcement": true,
+      "headerValidation": true,
+      "schemaValidationAtGateway": true,
+      "wafProtection": true
+    },
+    "errorHandling": {
+      "strategy": "Errors are normalized by the gateway and backend response shaping before being returned to the Teams client.",
+      "genericExternalErrors": true,
+      "secureLogStorage": true,
+      "structuredLoggingToLogAnalytics": true
+    }
   },
   "servers": [
     {
@@ -15,6 +45,7 @@
       "post": {
         "operationId": "chatWithAgent",
         "summary": "Ask a question about tax PDF forms",
+        "description": "Submit a prompt to the Tax PDF Forms agent and return a grounded response from the configured private Foundry workflow.",
         "requestBody": {
           "required": true,
           "content": {

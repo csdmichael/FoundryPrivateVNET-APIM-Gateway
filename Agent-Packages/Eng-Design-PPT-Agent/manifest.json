@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json",
   "manifestVersion": "devPreview",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "id": "2f3f3c91-1f4f-4c0f-b40c-1b6f6f1b1222",
   "name": {
     "short": "Eng Design PPT Agent",
@@ -9,9 +9,9 @@
   },
   "developer": {
     "name": "Michael Yaacoub at Microsoft",
-    "websiteUrl": "https://ai-gateway-apim-poc-my.azure-api.net",
-    "privacyUrl": "https://ai-gateway-apim-poc-my.azure-api.net/privacy",
-    "termsOfUseUrl": "https://ai-gateway-apim-poc-my.azure-api.net/terms"
+    "websiteUrl": "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs/support.md",
+    "privacyUrl": "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs/privacy-policy.md",
+    "termsOfUseUrl": "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs/terms-of-use.md"
   },
   "description": {
     "short": "Foundry agent package for engineering design presentations.",
@@ -49,6 +49,23 @@
           "type": "query",
           "title": "Ask Eng Design PPT",
           "description": "Ask a question about engineering design presentations",
+          "samplePrompts": [
+            {
+              "text": "Summarize the problem statement and design scope in engineering_design_review_001.pptx."
+            },
+            {
+              "text": "What system components or layers are shown in solution_architecture_update_002.pptx?"
+            },
+            {
+              "text": "What interfaces or data flows are called out between components in the architecture update deck?"
+            },
+            {
+              "text": "What risks or open issues are highlighted in engineering_design_review_001.pptx?"
+            },
+            {
+              "text": "Compare the two engineering decks: what stayed the same and what changed?"
+            }
+          ],
           "initialRun": false,
           "apiResponseRenderingTemplateFile": "responseRenderingTemplate.json",
           "parameters": [
