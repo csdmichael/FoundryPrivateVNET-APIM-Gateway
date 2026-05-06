@@ -31,6 +31,7 @@ jobs:
     env:
       TF_VAR_deploy_api: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_api || false }}
       TF_VAR_deploy_ui: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_ui || false }}
+      TF_VAR_bot_app_password: ${{ secrets.BOT_APP_PASSWORD }}
     permissions:
       id-token: write
       contents: read
@@ -44,6 +45,13 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
+      - name: Validate bot secret configured
+        shell: bash
+        run: |
+          if [ -z "${TF_VAR_bot_app_password}" ]; then
+            echo "BOT_APP_PASSWORD secret is not configured. Teams bot auth will fail without it."
+            exit 1
+          fi
       - name: Terraform init
         run: terraform init
       - name: Import existing Azure resources
@@ -74,17 +82,15 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install bot dependencies
-        working-directory: bot-function
-        run: pip install -r requirements.txt --target .python_packages/lib/site-packages
-      - name: Deploy bot function
-        uses: azure/functions-action@v1
+      - name: Deploy bot web app
+        uses: azure/webapps-deploy@v3
         with:
           app-name: func-fdryvnetgw-bot-eastus
           package: bot-function
+      - name: Verify bot health endpoint
+        shell: bash
+        run: |
+          curl --fail --silent --show-error https://func-fdryvnetgw-bot-eastus.azurewebsites.net/api/health
 
   build-and-deploy-api:
     needs: terraform
