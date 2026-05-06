@@ -70,6 +70,83 @@ function Get-TrackedResourceId {
     return $null
 }
 
+function Test-StateResourceId {
+    param(
+        [string]$Address,
+        [string]$ExpectedId
+    )
+
+    $trackedId = Get-TrackedResourceId -Address $Address
+    if ([string]::IsNullOrWhiteSpace($trackedId)) {
+        return $false
+    }
+
+    if ([string]::IsNullOrWhiteSpace($ExpectedId)) {
+        return $true
+    }
+
+    return $trackedId -eq $ExpectedId
+}
+
+function Invoke-VerifiedTerraformImport {
+    param(
+        [string]$Address,
+        [string]$ResourceId,
+        [int]$MaxAttempts = 2
+    )
+
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        if ($attempt -gt 1) {
+            Write-Host "Retrying import ($attempt/$MaxAttempts): $Address"
+        }
+
+        $importTempFile = [System.IO.Path]::GetTempFileName()
+        $importExitCode = 0
+        $importText = ''
+
+        try {
+            & terraform import '-var-file=main.tfvars.json' $Address $ResourceId *> $importTempFile
+            $importExitCode = $LASTEXITCODE
+            $importText = Get-Content $importTempFile -Raw -ErrorAction SilentlyContinue
+            if ($importText) {
+                $importText.TrimEnd() -split "`n" | ForEach-Object { Write-Host "  $_" }
+            }
+        }
+        finally {
+            Remove-Item $importTempFile -Force -ErrorAction SilentlyContinue
+        }
+
+        if (Test-StateResourceId -Address $Address -ExpectedId $ResourceId) {
+            return @{
+                Success = $true
+                MissingRemoteObject = $false
+                ExitCode = $importExitCode
+                Output = $importText
+            }
+        }
+
+        if ($importText -match 'non-existent remote object|no object exists with the given id') {
+            return @{
+                Success = $false
+                MissingRemoteObject = $true
+                ExitCode = $importExitCode
+                Output = $importText
+            }
+        }
+
+        if ($attempt -lt $MaxAttempts) {
+            & terraform state rm $Address 2>$null | Out-Null
+        }
+    }
+
+    return @{
+        Success = $false
+        MissingRemoteObject = $false
+        ExitCode = $importExitCode
+        Output = $importText
+    }
+}
+
 $imports = @(
     @{ Address = 'azurerm_log_analytics_workspace.main'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.OperationalInsights/workspaces/$logAnalyticsName" },
     @{ Address = 'azurerm_virtual_network.main'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Network/virtualNetworks/$vnetName" },
@@ -162,55 +239,39 @@ foreach ($import in $imports) {
     }
 
     Write-Host "Importing $address"
-    # Capture output to a temp file so piping doesn't mask the exit code
-    $importTempFile = [System.IO.Path]::GetTempFileName()
-    try {
-        & terraform import '-var-file=main.tfvars.json' $address $resourceId *> $importTempFile
-        $importExitCode = $LASTEXITCODE
-        $importText = Get-Content $importTempFile -Raw -ErrorAction SilentlyContinue
-        if ($importText) { $importText.TrimEnd() -split "`n" | ForEach-Object { Write-Host "  $_" } }
-    }
-    finally {
-        Remove-Item $importTempFile -Force -ErrorAction SilentlyContinue
+    $importResult = Invoke-VerifiedTerraformImport -Address $address -ResourceId $resourceId
+    if ($importResult.Success) {
+        if ($importResult.ExitCode -ne 0) {
+            Write-Host "  Import reported errors but resource is in state with expected ID: $address"
+        }
+        else {
+            Write-Host "  Imported with verified state: $address"
+        }
+
+        $trackedAddresses += $address
+        continue
     }
 
-    # Always verify state after import — exit code can be unreliable through pipelines
-    $stateCheck = @(terraform state list 2>$null)
-    if ($stateCheck -contains $address) {
-        if ($importExitCode -ne 0) {
-            Write-Host "  Import reported errors but resource is in state: $address"
-        }
-        else {
-            Write-Host "  Imported: $address"
-        }
+    if ($importResult.MissingRemoteObject) {
+        Write-Host "  Resource does not exist in Azure, skipping (will be created by apply): $address"
+        continue
     }
-    else {
-        # Resource not in state — determine why
-        if ($importText -and $importText -match 'non-existent remote object|no object exists with the given id') {
-            Write-Host "  Resource does not exist in Azure, skipping (will be created by apply): $address"
-        }
-        elseif ($importExitCode -eq 0 -and (-not $importText -or $importText -notmatch 'Error')) {
-            Write-Host "  WARNING: import returned success but resource not in state: $address"
-        }
-        else {
-            $ErrorActionPreference = $prevErrorPref
-            throw "terraform import failed for $address (exit code $importExitCode)"
-        }
-    }
+
+    $ErrorActionPreference = $prevErrorPref
+    throw "terraform import failed for $address (exit code $($importResult.ExitCode))"
 }
 
 $ErrorActionPreference = $prevErrorPref
 
 # Verify critical resources were imported
-$finalState = @(terraform state list 2>$null)
-$requiredAddresses = @(
-    'azurerm_virtual_network.main',
-    'azurerm_subnet.private_endpoints',
-    'azurerm_linux_web_app.bot'
+$requiredImports = @(
+    @{ Address = 'azurerm_virtual_network.main'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Network/virtualNetworks/$vnetName" },
+    @{ Address = 'azurerm_subnet.private_endpoints'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Network/virtualNetworks/$vnetName/subnets/private-endpoints" },
+    @{ Address = 'azurerm_linux_web_app.bot'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/func-${namePrefix}-bot-$locationSlug" }
 )
-foreach ($required in $requiredAddresses) {
-    if ($finalState -notcontains $required) {
-        throw "Critical resource not in state after import: $required. Check import script output above."
+foreach ($required in $requiredImports) {
+    if (-not (Test-StateResourceId -Address $required.Address -ExpectedId $required.Id)) {
+        throw "Critical resource not in state after import: $($required.Address). Expected ID: $($required.Id)"
     }
 }
 
