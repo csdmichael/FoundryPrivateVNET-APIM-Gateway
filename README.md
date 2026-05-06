@@ -24,7 +24,7 @@ All runtime configuration lives in the `config/` folder. These JSON files are lo
 | `document_config.json` | Sample document metadata (filename, doc_id, title) used to seed and validate each use-case Search index |
 | `prompts_config.json` | Sample prompts grouped by query type (`keyword`, `semantic`, `agent`) for smoke-testing each agent |
 | `search_config.json` | Azure AI Search index and indexer names for each use case, used by the clone and provisioning scripts |
-| `storage_config.json` | Storage notes for the solution — documents that this solution uses Cosmos DB-backed content rather than blob containers |
+| `storage_config.json` | Storage notes for the solution — document that this solution uses Cosmos DB-backed content rather than blob containers |
 | `__init__.py` | Python module that loads and caches each JSON file; exposes typed accessors (`azure_resources()`, `agent_config()`, `prompts_config()`, `document_config()`, `search_config()`, `storage_config()`) used throughout the codebase |
 
 ### azure_resources.json
