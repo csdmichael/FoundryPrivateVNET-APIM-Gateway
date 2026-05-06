@@ -277,30 +277,47 @@ Install the [Teams Toolkit](https://marketplace.visualstudio.com/items?itemName=
 4. Use **Teams Toolkit: Zip Teams Metadata Package** or run `./scripts/package-teams-agents.ps1`.
 5. Use **Teams Toolkit: Upload to Teams** to sideload the package for testing.
 
-### Data flow: Teams agent → APIM → Foundry
+### Data flow: Teams → Bot → APIM → Foundry Agent
 
-The Teams agent packages call APIM directly with a flat `{prompt}` request. APIM transforms it into an OpenAI chat completions call to Foundry and returns a flat response. No backend API app service or subscription key is required from the Teams side.
+The full request/response path for Teams chat uses the Bot Framework, APIM gateway policies, and Foundry private endpoints:
+
+![Teams Bot APIM Foundry Agent Data Flow](docs/Teams-Bot-APIM-FoundryAgent.png)
+
+**Flow steps:**
+
+1. User sends a message in Microsoft Teams (chat, channel, or personal app)
+2. Azure Bot Service receives and normalizes the message via Entra ID authentication
+3. Bot App (web app) processes the message using Bot Framework SDK and calls APIM
+4. APIM validates, transforms the flat `{prompt}` into OpenAI chat format, and routes to Foundry via Private Link
+5. Foundry Agent calls the model (gpt-4.1) for inference via Private Link, grounded by Azure AI Search
+6. Response returns from Foundry → APIM (transforms to flat JSON) → Bot App → Bot Service → Teams
+
+The compose extension path is similar but bypasses the Bot Service: Teams calls APIM `/chat` directly with a flat `{prompt}` request and renders the response as an Adaptive Card.
 
 ```mermaid
 sequenceDiagram
     participant User as Teams User
     participant Teams as Microsoft Teams
-    participant APIM as Azure API Management<br/>(ai-gateway-apim-poc-my)
-    participant Foundry as Azure AI Foundry<br/>(002-ai-poc-private)
-    participant Search as Azure AI Search<br/>(aisearch-poc-myaacoub)
+    participant Bot as Azure Bot Service
+    participant BotApp as Bot Web App
+    participant APIM as Azure API Management
+    participant Foundry as Azure AI Foundry
+    participant Search as Azure AI Search
 
-    User->>Teams: Types question in compose box
-    Teams->>Teams: Reads apiSpecificationFile.json<br/>from message extension manifest
-    Teams->>APIM: POST /foundry-privatevnet-app/chat<br/>Body: {"prompt": "..."}
-    APIM->>APIM: Extracts prompt, builds<br/>OpenAI chat request
-    APIM->>Foundry: POST /openai/deployments/gpt-4.1/<br/>chat/completions<br/>Auth: managed identity
-    Foundry->>Search: Queries search index<br/>(tax-pdf-forms-index or<br/>eng-design-ppt-index)
-    Search-->>Foundry: Returns grounded chunks
-    Foundry-->>APIM: Chat completion response
-    APIM->>APIM: Transforms to flat JSON<br/>{"response": "...", "use_case": "..."}
-    APIM-->>Teams: Flat JSON response
-    Teams->>Teams: Renders responseRenderingTemplate.json<br/>(Adaptive Card)
-    Teams-->>User: Displays answer card
+    User->>Teams: Sends message
+    Teams->>Bot: Activity (HTTPS)
+    Bot->>BotApp: Forward activity
+    BotApp->>APIM: POST /foundry-privatevnet-app/chat<br/>Body: {"prompt": "..."}
+    APIM->>APIM: Transform to OpenAI format
+    APIM->>Foundry: POST /openai/deployments/gpt-4.1/<br/>chat/completions (managed identity)
+    Foundry->>Search: Query search index
+    Search-->>Foundry: Grounded chunks
+    Foundry-->>APIM: Chat completion
+    APIM->>APIM: Transform to {"response": "..."}
+    APIM-->>BotApp: Flat JSON
+    BotApp-->>Bot: Reply activity
+    Bot-->>Teams: Message
+    Teams-->>User: Displays answer
 ```
 
 ### Common packaging errors
