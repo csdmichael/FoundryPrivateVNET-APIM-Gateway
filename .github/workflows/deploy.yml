@@ -53,6 +53,32 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: terraform apply -auto-approve -var-file=main.tfvars.json
 
+  deploy-bot-function:
+    needs: terraform
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install bot dependencies
+        working-directory: bot-function
+        run: pip install -r requirements.txt --target .python_packages/lib/site-packages
+      - name: Deploy bot function
+        uses: azure/functions-action@v1
+        with:
+          app-name: func-fdryvnetgw-bot-eastus
+          package: bot-function
+
   build-and-deploy-api:
     needs: terraform
     if: github.event_name == 'workflow_dispatch' && inputs.deploy_api
@@ -116,10 +142,11 @@ jobs:
           package: ui/www
 
   post-deploy:
-    needs: [terraform, build-and-deploy-api, build-and-deploy-ui]
+    needs: [terraform, deploy-bot-function, build-and-deploy-api, build-and-deploy-ui]
     if: >-
       always() &&
       needs.terraform.result == 'success' &&
+      contains(fromJson('[\"success\",\"skipped\"]'), needs.deploy-bot-function.result) &&
       contains(fromJson('["success","skipped"]'), needs.build-and-deploy-api.result) &&
       contains(fromJson('["success","skipped"]'), needs.build-and-deploy-ui.result)
     runs-on: ubuntu-latest

@@ -22,6 +22,23 @@
     "color": "color.png"
   },
   "accentColor": "#0F6CBD",
+  "bots": [
+    {
+      "botId": "37a8fd15-4b3c-4289-9e8c-19b65120b844",
+      "scopes": ["personal", "team", "groupChat"],
+      "commandLists": [
+        {
+          "scopes": ["personal"],
+          "commands": [
+            {
+              "title": "Ask",
+              "description": "Ask a question about tax PDF forms"
+            }
+          ]
+        }
+      ]
+    }
+  ],
   "composeExtensions": [
     {
       "composeExtensionType": "apiBased",

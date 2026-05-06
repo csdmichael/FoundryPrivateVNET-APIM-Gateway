@@ -98,6 +98,19 @@ variable "tags" {
   }
 }
 
+variable "bot_app_id" {
+  type        = string
+  description = "Entra app registration ID for the Teams bot"
+  default     = "37a8fd15-4b3c-4289-9e8c-19b65120b844"
+}
+
+variable "bot_app_password" {
+  type        = string
+  sensitive   = true
+  description = "Entra app secret for the Teams bot"
+  default     = ""
+}
+
 data "azurerm_resource_group" "target" {
   name = var.resource_group_name
 }
@@ -462,5 +475,89 @@ resource "azurerm_monitor_diagnostic_setting" "ui" {
 
   enabled_metric {
     category = "AllMetrics"
+  }
+}
+
+# =============================================================================
+# Bot Function App — receives Teams messages and proxies to APIM /chat
+# =============================================================================
+
+resource "azurerm_storage_account" "bot" {
+  name                     = "st${replace(var.name_prefix, "-", "")}bot"
+  resource_group_name      = data.azurerm_resource_group.target.name
+  location                 = var.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  tags                     = var.tags
+}
+
+resource "azurerm_service_plan" "bot" {
+  name                = "plan-${var.name_prefix}-bot-${local.location_slug}"
+  resource_group_name = data.azurerm_resource_group.target.name
+  location            = var.location
+  os_type             = "Linux"
+  sku_name            = "Y1"
+  tags                = var.tags
+}
+
+resource "azurerm_linux_function_app" "bot" {
+  name                       = "func-${var.name_prefix}-bot-${local.location_slug}"
+  resource_group_name        = data.azurerm_resource_group.target.name
+  location                   = var.location
+  storage_account_name       = azurerm_storage_account.bot.name
+  storage_account_access_key = azurerm_storage_account.bot.primary_access_key
+  service_plan_id            = azurerm_service_plan.bot.id
+  tags                       = var.tags
+
+  site_config {
+    application_stack {
+      python_version = "3.11"
+    }
+  }
+
+  app_settings = {
+    "FUNCTIONS_WORKER_RUNTIME" = "python"
+    "MicrosoftAppId"           = var.bot_app_id
+    "MicrosoftAppPassword"     = var.bot_app_password
+    "MicrosoftAppType"         = "SingleTenant"
+    "MicrosoftAppTenantId"     = data.azurerm_client_config.current.tenant_id
+    "APIM_CHAT_URL"            = "https://${data.azurerm_api_management.apim.gateway_url}/foundry-privatevnet-app/chat"
+  }
+}
+
+resource "azapi_resource" "bot_registration" {
+  type      = "Microsoft.BotService/botServices@2022-09-15"
+  name      = "foundry-privatevnet-bot"
+  location  = "global"
+  parent_id = data.azurerm_resource_group.target.id
+  tags      = var.tags
+
+  body = {
+    sku = {
+      name = "F0"
+    }
+    kind = "azurebot"
+    properties = {
+      displayName                         = "Foundry Private VNET Bot"
+      endpoint                            = "https://${azurerm_linux_function_app.bot.default_hostname}/api/messages"
+      msaAppId                            = var.bot_app_id
+      msaAppType                          = "SingleTenant"
+      msaAppTenantId                      = data.azurerm_client_config.current.tenant_id
+    }
+  }
+}
+
+resource "azapi_resource" "bot_teams_channel" {
+  type      = "Microsoft.BotService/botServices/channels@2022-09-15"
+  name      = "MsTeamsChannel"
+  parent_id = azapi_resource.bot_registration.id
+
+  body = {
+    properties = {
+      channelName = "MsTeamsChannel"
+      properties = {
+        isEnabled = true
+      }
+    }
   }
 }

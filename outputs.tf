@@ -33,3 +33,15 @@ output "foundry_private_endpoint_ip" {
 output "search_private_endpoint_ip" {
   value = one(azurerm_private_endpoint.search.private_service_connection).private_ip_address
 }
+
+output "bot_function_app_name" {
+  value = azurerm_linux_function_app.bot.name
+}
+
+output "bot_function_url" {
+  value = "https://${azurerm_linux_function_app.bot.default_hostname}/api/messages"
+}
+
+output "bot_app_id" {
+  value = var.bot_app_id
+}
