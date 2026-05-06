@@ -66,8 +66,23 @@ function Ensure-RoleAssignment {
     Assert-LastExitCode "Checking $Description"
     if (-not $existingAssignment) {
         Write-Host "Granting $RoleName to $($Principal.Name) on $Scope"
-        az role assignment create --assignee-object-id $Principal.ObjectId --assignee-principal-type $Principal.PrincipalType --role $RoleName --scope $Scope -o none
-        Assert-LastExitCode "Creating $Description"
+        $assignmentOutput = az role assignment create --assignee-object-id $Principal.ObjectId --assignee-principal-type $Principal.PrincipalType --role $RoleName --scope $Scope -o none 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            $assignmentMessage = ($assignmentOutput | Out-String).Trim()
+            if ($assignmentMessage -match 'Microsoft.Authorization/roleAssignments/write|AuthorizationFailed') {
+                throw @"
+Current deployment principal '$($Principal.Name)' (object id '$($Principal.ObjectId)') is missing '$RoleName' on '$Scope', and it cannot self-assign that role because it lacks 'Microsoft.Authorization/roleAssignments/write'.
+
+Grant '$RoleName' to this principal on the Foundry account scope from an identity that has Owner or User Access Administrator on that scope, then rerun provisioning.
+
+Scope: $Scope
+Principal type: $($Principal.PrincipalType)
+Required role: $RoleName
+"@
+            }
+
+            throw "Creating $Description failed.`n$assignmentMessage"
+        }
     }
 }
 
