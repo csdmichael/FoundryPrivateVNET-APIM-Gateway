@@ -31,17 +31,43 @@ if (-not $SkipTerraform) {
     }
 }
 
+# --- Parallel phase: run independent post-terraform tasks concurrently ---
+$parallelJobs = @()
+
 if (-not $SkipClone) {
-    & "$PSScriptRoot\provision-source-use-cases.ps1"
+    $parallelJobs += Start-Job -Name 'provision' -ScriptBlock {
+        Set-Location $using:PWD
+        & "$using:PSScriptRoot\provision-source-use-cases.ps1"
+    }
 }
 
 if (-not $SkipApim) {
-    & "$PSScriptRoot\configure-apim.ps1"
-    & "$PSScriptRoot\configure-foundry-ai-gateway.ps1"
+    $parallelJobs += Start-Job -Name 'apim' -ScriptBlock {
+        Set-Location $using:PWD
+        & "$using:PSScriptRoot\configure-apim.ps1"
+        & "$using:PSScriptRoot\configure-foundry-ai-gateway.ps1"
+    }
 }
 
 if (-not $SkipPackage) {
-    & "$PSScriptRoot\package-teams-agents.ps1"
+    $parallelJobs += Start-Job -Name 'package' -ScriptBlock {
+        Set-Location $using:PWD
+        & "$using:PSScriptRoot\package-teams-agents.ps1"
+    }
+}
+
+if ($parallelJobs.Count -gt 0) {
+    Write-Host "Running $($parallelJobs.Count) tasks in parallel: $($parallelJobs.Name -join ', ')"
+    $parallelJobs | Wait-Job | ForEach-Object {
+        Write-Host "--- [$($_.Name)] output ---"
+        Receive-Job $_
+        if ($_.State -eq 'Failed') {
+            $failedName = $_.Name
+            $parallelJobs | Remove-Job -Force
+            throw "Parallel task '$failedName' failed. See output above."
+        }
+    }
+    $parallelJobs | Remove-Job -Force
 }
 
 if (-not $SkipTests) {

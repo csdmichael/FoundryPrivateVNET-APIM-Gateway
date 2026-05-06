@@ -197,6 +197,7 @@ foreach ($import in $imports) {
             throw "terraform import failed for $address (exit code $importExitCode)"
         }
     }
+}
 
 $ErrorActionPreference = $prevErrorPref
 

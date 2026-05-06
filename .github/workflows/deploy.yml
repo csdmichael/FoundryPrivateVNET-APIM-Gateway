@@ -148,7 +148,7 @@ jobs:
           app-name: ${{ secrets.UI_WEBAPP_NAME }}
           package: ui/www
 
-  post-deploy:
+  configure-apim:
     needs: [terraform, deploy-bot-function, build-and-deploy-api, build-and-deploy-ui]
     if: >-
       always() &&
@@ -180,12 +180,75 @@ jobs:
       - name: Configure Foundry AI gateway via APIM
         shell: pwsh
         run: ./scripts/configure-foundry-ai-gateway.ps1
+
+  provision-search-agents:
+    needs: [terraform, deploy-bot-function, build-and-deploy-api, build-and-deploy-ui]
+    if: >-
+      always() &&
+      needs.terraform.result == 'success' &&
+      contains(fromJson('[\"success\",\"skipped\"]'), needs.deploy-bot-function.result) &&
+      contains(fromJson('["success","skipped"]'), needs.build-and-deploy-api.result) &&
+      contains(fromJson('["success","skipped"]'), needs.build-and-deploy-ui.result)
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deployment dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-deploy.txt
       - name: Provision private Search and agents from source repo
         shell: pwsh
         run: ./scripts/provision-source-use-cases.ps1
+
+  package-teams-agents:
+    needs: [terraform, deploy-bot-function, build-and-deploy-api, build-and-deploy-ui]
+    if: >-
+      always() &&
+      needs.terraform.result == 'success' &&
+      contains(fromJson('[\"success\",\"skipped\"]'), needs.deploy-bot-function.result) &&
+      contains(fromJson('["success","skipped"]'), needs.build-and-deploy-api.result) &&
+      contains(fromJson('["success","skipped"]'), needs.build-and-deploy-ui.result)
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
       - name: Package Teams agents
         shell: pwsh
         run: ./scripts/package-teams-agents.ps1
+
+  test:
+    needs: [configure-apim, provision-search-agents, package-teams-agents]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deployment dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-deploy.txt
       - name: Test sample prompts
         shell: pwsh
         env:
