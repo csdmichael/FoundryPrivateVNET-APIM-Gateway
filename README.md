@@ -95,8 +95,8 @@ FoundryPrivateVNET-APIM-Gateway/
 │   ├── Tax-PDF-Forms-Agent/
 │   │   ├── manifest.json              # Teams app manifest (v1.19)
 │   │   ├── apiSpecificationFile.json  # OpenAPI spec → APIM /chat endpoint
-│   │   ├── color.png                  # 192×192 color icon
-│   │   ├── outline.png                # 32×32 outline icon
+│   │   ├── color.png                  # 192x192 color icon
+│   │   ├── outline.png                # 32x32 outline icon
 │   │   └── Tax-PDF-Forms-Agent.zip    # Sideloadable Teams package
 │   └── Eng-Design-PPT-Agent/
 │       ├── manifest.json
