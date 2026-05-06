@@ -183,17 +183,22 @@ foreach ($ucKey in $useCases.Keys) {
         $words = $p.text -split '\s+' | Select-Object -First 4
         $title = ($words -join ' ')
         if ($title.Length -gt 32) { $title = $title.Substring(0, 29) + '...' }
+        $desc = ($p.text -split '[.?]' | Select-Object -First 1).Trim()
+        if ($desc.Length -gt 128) { $desc = $desc.Substring(0, 125) + '...' }
+        $promptText = $p.text
+        if ($promptText.Length -gt 128) { $promptText = $promptText.Substring(0, 125) + '...' }
         $botCommands += @{
             title       = $title
-            description = ($p.text -split '[.?]' | Select-Object -First 1).Trim()
+            description = $desc
             type        = 'prompt'
-            prompt      = $p.text
+            prompt      = $promptText
         }
     }
 
     # ── Compose extension sample prompts ─────────────────────────────────
     $samplePrompts = @($agentPrompts | Select-Object -First 5 | ForEach-Object {
-        @{ text = $_.text }
+        $t = $_.text; if ($t.Length -gt 128) { $t = $t.Substring(0, 125) + '...' }
+        @{ text = $t }
     })
 
     # ── manifest.json ────────────────────────────────────────────────────

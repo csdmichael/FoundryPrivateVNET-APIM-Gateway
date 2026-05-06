@@ -1,7 +1,7 @@
 ﻿{
     "$schema":  "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json",
     "manifestVersion":  "devPreview",
-    "version":  "1.0.5",
+    "version":  "1.0.6",
     "id":  "3d33b58f-6c93-48c4-b8b6-6da36fd8d111",
     "name":  {
                  "short":  "Tax PDF Forms Agent",
@@ -46,7 +46,7 @@
                                                                {
                                                                    "title":  "In lq_tax_exemption_IN_001_ye...",
                                                                    "description":  "In lq_tax_exemption_IN_001_yellow",
-                                                                   "prompt":  "In lq_tax_exemption_IN_001_yellow.pdf, what is the stated purpose of the Indiana tax exemption certificate and who is expected to use it?",
+                                                                   "prompt":  "In lq_tax_exemption_IN_001_yellow.pdf, what is the stated purpose of the Indiana tax exemption certificate and who is expecte...",
                                                                    "type":  "prompt"
                                                                },
                                                                {
@@ -101,7 +101,7 @@
                                                        "description":  "Ask a question about tax PDF forms",
                                                        "samplePrompts":  [
                                                                              {
-                                                                                 "text":  "In lq_tax_exemption_IN_001_yellow.pdf, what is the stated purpose of the Indiana tax exemption certificate and who is expected to use it?"
+                                                                                 "text":  "In lq_tax_exemption_IN_001_yellow.pdf, what is the stated purpose of the Indiana tax exemption certificate and who is expecte..."
                                                                              },
                                                                              {
                                                                                  "text":  "List the purchaser or organization identification fields that must be completed on the Indiana tax exemption certificate."
