@@ -71,6 +71,11 @@ def apim_gateway_url() -> str:
     return azure_resources()["apim"]["gateway_url"]
 
 
+def apim_chat_url() -> str:
+    apim = azure_resources()["apim"]
+    return f"{apim['gateway_url']}/{apim['api_path']}/chat"
+
+
 def apim_api_base_url() -> str:
     apim = azure_resources()["apim"]
     return f"{apim['gateway_url']}/{apim['api_path']}/api"

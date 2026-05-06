@@ -25,10 +25,7 @@ for _candidate in [_msg_dir.parent, _msg_dir.parents[1]]:
 
 import config
 
-APIM_CHAT_URL = os.environ.get(
-    "APIM_CHAT_URL",
-    "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/chat",
-)
+APIM_CHAT_URL = os.environ.get("APIM_CHAT_URL") or config.apim_chat_url()
 BOT_APP_ID = os.environ.get("MicrosoftAppId", "")
 BOT_APP_PASSWORD = os.environ.get("MicrosoftAppPassword", "")
 
