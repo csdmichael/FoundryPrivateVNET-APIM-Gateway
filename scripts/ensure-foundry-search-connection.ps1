@@ -18,11 +18,9 @@ $projectEndpoint = $config.foundry.project_endpoint.TrimEnd('/')
 $projectName = ($projectEndpoint -split '/')[-1]
 $accountName = $config.foundry.account_name
 $connectionName = if ($config.foundry.search_connection_name) { $config.foundry.search_connection_name } else { 'aisearchpocmyaacoub' }
-$searchEndpoint = $config.search.target_endpoint.TrimEnd('/') + '/'
+$searchEndpoint = $config.search.target_endpoint.TrimEnd('/')
 $searchResourceId = $config.search.target_resource_id
 $searchDisplayName = $config.search.target_service_name
-
-$connectionUrl = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.CognitiveServices/accounts/$accountName/projects/$projectName/connections/$connectionName?api-version=2025-06-01"
 
 $searchKey = az search admin-key show --resource-group $resourceGroup --service-name $searchDisplayName --query primaryKey -o tsv
 Assert-LastExitCode "Retrieving Search admin key"
@@ -30,31 +28,67 @@ if (-not $searchKey) {
     throw "Unable to read admin key for $searchDisplayName"
 }
 
-$payload = @{
-    properties = @{
-        authType = 'ApiKey'
-        category = 'CognitiveSearch'
-        isDefault = $true
-        isSharedToAll = $false
-        metadata = @{
-            ApiType = 'Azure'
-            ApiVersion = '2024-05-01-preview'
-            DeploymentApiVersion = '2023-11-01'
-            ResourceId = $searchResourceId
-            displayName = $searchDisplayName
-            type = 'azure_ai_search'
-        }
-        target = $searchEndpoint
-        useWorkspaceManagedIdentity = $false
-        credentials = @{
-            key = $searchKey
-        }
+$templatePath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-search-connection.bicep'
+$parametersPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-search-connection.parameters.json'
+
+$template = @"
+param accountName string
+param projectName string
+param connectionName string
+param searchEndpoint string
+param searchResourceId string
+param location string
+
+@secure()
+param searchKey string
+
+resource aiAccount 'Microsoft.CognitiveServices/accounts@2025-04-01-preview' existing = {
+    name: accountName
+
+    resource aiProject 'projects' existing = {
+        name: projectName
     }
 }
 
-$payloadPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-search-connection.json'
-$payload | ConvertTo-Json -Depth 20 | Set-Content -Path $payloadPath -Encoding UTF8
+resource searchConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview' = {
+    name: connectionName
+    parent: aiAccount::aiProject
+    properties: {
+        category: 'CognitiveSearch'
+        target: searchEndpoint
+        authType: 'ApiKey'
+        isSharedToAll: false
+        credentials: {
+            key: searchKey
+        }
+        metadata: {
+            ApiType: 'Azure'
+            ResourceId: searchResourceId
+            location: location
+            type: 'azure_ai_search'
+        }
+    }
+}
+"@
 
-az rest --method put --headers Content-Type=application/json --url $connectionUrl --body "@$payloadPath" | Out-Null
+$parameters = @{
+        '$schema' = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
+        contentVersion = '1.0.0.0'
+        parameters = @{
+                accountName = @{ value = $accountName }
+                projectName = @{ value = $projectName }
+                connectionName = @{ value = $connectionName }
+                searchEndpoint = @{ value = $searchEndpoint }
+                searchResourceId = @{ value = $searchResourceId }
+                location = @{ value = $config.location }
+                searchKey = @{ value = $searchKey }
+        }
+}
+
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($templatePath, $template, $utf8NoBom)
+[System.IO.File]::WriteAllText($parametersPath, ($parameters | ConvertTo-Json -Depth 20), $utf8NoBom)
+
+az deployment group create --resource-group $resourceGroup --name "foundry-search-connection-$connectionName" --template-file $templatePath --parameters "@$parametersPath" -o none | Out-Null
 Assert-LastExitCode "Ensuring Foundry Search connection '$connectionName'"
 Write-Host "Ensured Foundry Search connection: $connectionName"
