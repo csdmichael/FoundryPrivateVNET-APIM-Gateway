@@ -134,6 +134,7 @@ FoundryPrivateVNET-APIM-Gateway/
 │   ├── configure-foundry-ai-gateway.ps1  # Foundry OpenAI gateway APIM surface
 │   ├── ensure-foundry-search-connection.ps1
 │   ├── package-teams-agents.ps1   # Zips each Agent-Package folder
+│   ├── export-agents-generate-packages.ps1  # Export agents from Foundry and generate Teams packages
 │   ├── provision-source-use-cases.ps1    # Source-driven Search + Foundry agent provisioning
 │   ├── clone-search-assets.ps1    # Delegates to source-driven provisioning
 │   ├── clone-foundry-agents.ps1   # Delegates to source-driven provisioning
@@ -236,6 +237,13 @@ The packaging script zips each agent folder's `manifest.json`, `apiSpecification
 ./scripts/package-teams-agents.ps1
 ```
 
+Alternatively, the export-and-package script exports live agent definitions from Foundry (via APIM) and regenerates the full Teams packages in one step:
+
+```powershell
+./scripts/export-agents-generate-packages.ps1           # export from Foundry + generate packages
+./scripts/export-agents-generate-packages.ps1 -PackageOnly  # regenerate packages from config only
+```
+
 This runs automatically during `./scripts/deploy.ps1` and the GitHub Actions `post-deploy` job. To skip packaging during local deployment, use `-SkipPackage`.
 
 ### Publishing via Teams Developer Portal
@@ -304,10 +312,11 @@ Or add `TAX_BOT_APP_PASSWORD` and `ENG_BOT_APP_PASSWORD` as GitHub Actions secre
 
 > **Note:** All APIM paths below are deployed inside a private Azure VNet and are not reachable from the public internet. They are accessible only from resources connected to the same VNet or via VNet peering/VPN.
 
-The deployment configures three APIM surfaces:
+The deployment configures four APIM surfaces:
 
 - **App backend API** at `{apim_gateway_url}/foundry-privatevnet-app` — imported from the OpenAPI spec, subscription-free
 - **Foundry OpenAI gateway** at `{apim_gateway_url}/002-ai-poc-private/openai` — proxies to the Foundry account with managed identity
+- **Foundry Agents gateway** at `{apim_gateway_url}/foundry-agents` — proxies the Foundry Agents/Assistants REST API with managed identity (`https://ai.azure.com` audience), enabling agent CRUD operations through APIM without caller-side credentials
 - **Teams chat endpoint** at `{apim_gateway_url}/foundry-privatevnet-app/chat` — APIM operation-level policy transforms flat `{prompt}` into OpenAI chat completions
 
 Replace `{apim_gateway_url}` with the value of `apim.gateway_url` from `config/azure_resources.json`.
@@ -328,6 +337,17 @@ The `/chat` operation on the `foundry-privatevnet-app` API uses an APIM policy t
 5. Transforms the OpenAI response back to flat `{"response": "...", "use_case": "..."}` for the Teams adaptive card
 
 This eliminates the need for a backend API app service. The Teams message extension calls APIM directly, and APIM handles all Foundry communication.
+
+### Foundry Agents gateway
+
+The `/foundry-agents` API proxies the Foundry project's Agents/Assistants REST API through APIM. This lets `scripts/create_foundry_agent.py` and `scripts/export-agents-generate-packages.ps1` perform agent CRUD without any caller-side credentials — APIM authenticates to Foundry using its managed identity with audience `https://ai.azure.com`.
+
+To bypass APIM and call Foundry directly (e.g. from a VNet-connected machine), set `FOUNDRY_DIRECT=1`:
+
+```powershell
+$env:FOUNDRY_DIRECT = '1'
+./scripts/export-agents-generate-packages.ps1
+```
 
 ## AI Gateway Screenshots
 
@@ -455,6 +475,8 @@ Repository secrets configured in `csdmichael/FoundryPrivateVNET-APIM-Gateway`:
 | `AZURE_CLIENT_ID` | `b01a1a97-faef-4d58-8a9a-764d0b2697ec` |
 | `AZURE_TENANT_ID` | `b158173c-91f6-4f99-b5e9-aa9bcb463863` |
 | `AZURE_SUBSCRIPTION_ID` | `86b37969-9445-49cf-b03f-d8866235171c` |
+| `TAX_BOT_APP_PASSWORD` | Client secret for the tax bot Entra app registration |
+| `ENG_BOT_APP_PASSWORD` | Client secret for the engineering bot Entra app registration |
 | `API_WEBAPP_NAME` | `foundry-privatevnet-api` |
 | `UI_WEBAPP_NAME` | `foundry-privatevnet-ui` |
 | `APP_API_BASE_URL` | `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app` |
@@ -464,7 +486,7 @@ GitHub environments are not required by the current workflow set. Authentication
 Current workflow split:
 
 - `deploy-infra.yml` for Terraform and resource import changes
-- `deploy-bot.yml` for the bot function app
+- `deploy-bot.yml` for the bot function apps (matrix deploys to both `func-fdryvnetgw-tax-bot-eastus` and `func-fdryvnetgw-eng-bot-eastus`)
 - `configure-platform.yml` for APIM and Foundry AI gateway configuration
 - `provision-search-agents.yml` for two-phase Search asset provisioning followed by Foundry agent provisioning
 - `package-teams-agents.yml` for Teams package zips
