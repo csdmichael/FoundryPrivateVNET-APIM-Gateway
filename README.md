@@ -488,7 +488,7 @@ Notes:
 - The workflows still use a single Terraform configuration and a branch-scoped OIDC credential for `main`.
 - API and UI GitHub Actions deployments are currently disabled, so App Service changes for those components are not deployed through the active workflow set.
 - Docs-only updates are ignored by deployment workflows.
-- Agent provisioning requires the current deployment principal to have `Azure AI User` on the target Foundry account. The provisioning script checks for that role and attempts assignment, but identities that only have `Contributor` still need an out-of-band grant from an `Owner` or `User Access Administrator`.
+- Agent provisioning requires the current deployment principal to have `Azure AI User` on the target Foundry account. In CI, the provisioning workflow treats that as a prerequisite and does not attempt self-assignment. For local privileged runs, set `AUTO_ASSIGN_FOUNDRY_ROLE=true` to let the script try the role assignment automatically.
 - Post-deploy provisioning is self-contained in this repo and no longer clones or patches the external `AI-Search-Blob-Storage` repository at deployment time.
 - The private Foundry project uses the `aisearchpocmyaacoub` Azure AI Search connection created by `scripts/ensure-foundry-search-connection.ps1`.
 - The private Search service must have a system-assigned managed identity enabled.
@@ -507,6 +507,13 @@ Instead, the post-deploy step uses local scripts in this repo to provision only 
 The provisioning wrapper is:
 
 ```powershell
+./scripts/provision-source-use-cases.ps1
+```
+
+By default, this script treats missing Foundry RBAC as a prerequisite and fails with the exact `az role assignment create` command needed to fix it. To let the script attempt the role assignment automatically, run it from an identity that has `Owner` or `User Access Administrator` on the Foundry account scope and set:
+
+```powershell
+$env:AUTO_ASSIGN_FOUNDRY_ROLE = 'true'
 ./scripts/provision-source-use-cases.ps1
 ```
 
