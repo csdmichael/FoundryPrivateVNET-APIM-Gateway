@@ -37,6 +37,41 @@ if ([string]::IsNullOrWhiteSpace($searchPrivateEndpointId)) {
 
 $ErrorActionPreference = 'Stop'
 
+# Helper: run terraform with proper argument passing so for_each addresses
+# (e.g.  azurerm_linux_web_app.bot["tax_pdf_forms"]) survive PowerShell-to-
+# native quoting on both Windows and Linux.
+# Manually builds the Arguments string with escaped quotes, compatible with
+# both Windows PowerShell 5.1 and PowerShell 7+.
+function Invoke-Terraform {
+    param([string[]]$Arguments)
+    $psi = [System.Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName = 'terraform'
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.WorkingDirectory = $PWD.Path
+    # Escape each argument: if it contains quotes or spaces, wrap in double
+    # quotes with inner quotes backslash-escaped.
+    $escapedArgs = foreach ($arg in $Arguments) {
+        if ($arg -match '["\s]') {
+            $escaped = $arg -replace '"', '\"'
+            "`"$escaped`""
+        } else {
+            $arg
+        }
+    }
+    $psi.Arguments = $escapedArgs -join ' '
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $stdOut = $proc.StandardOutput.ReadToEnd()
+    $stdErr = $proc.StandardError.ReadToEnd()
+    $proc.WaitForExit()
+    return @{
+        ExitCode = $proc.ExitCode
+        StdOut   = if ($stdOut) { $stdOut.TrimEnd() } else { '' }
+        StdErr   = if ($stdErr) { $stdErr.TrimEnd() } else { '' }
+    }
+}
+
 function Remove-StateAddresses {
     param(
         [string[]]$Addresses,
@@ -46,7 +81,7 @@ function Remove-StateAddresses {
     foreach ($address in $Addresses) {
         if ($TrackedAddresses -contains $address) {
             Write-Host "Removing from state: $address"
-            & terraform state rm $address | Out-Null
+            Invoke-Terraform -Arguments @('state', 'rm', $address) | Out-Null
         }
     }
 }
@@ -56,12 +91,12 @@ function Get-TrackedResourceId {
         [string]$Address
     )
 
-    $stateOutput = & terraform state show -no-color $Address 2>$null
-    if ($LASTEXITCODE -ne 0 -or -not $stateOutput) {
+    $result = Invoke-Terraform -Arguments @('state', 'show', '-no-color', $address)
+    if ($result.ExitCode -ne 0 -or -not $result.StdOut) {
         return $null
     }
 
-    foreach ($line in $stateOutput) {
+    foreach ($line in ($result.StdOut -split "`n")) {
         if ($line -match '^\s*id\s*=\s*"?(.*?)"?$') {
             return $matches[1]
         }
@@ -100,20 +135,14 @@ function Invoke-VerifiedTerraformImport {
             Write-Host "Retrying import ($attempt/$MaxAttempts): $Address"
         }
 
-        $importTempFile = [System.IO.Path]::GetTempFileName()
         $importExitCode = 0
         $importText = ''
 
-        try {
-            & terraform import '-var-file=main.tfvars.json' $Address $ResourceId *> $importTempFile
-            $importExitCode = $LASTEXITCODE
-            $importText = Get-Content $importTempFile -Raw -ErrorAction SilentlyContinue
-            if ($importText) {
-                $importText.TrimEnd() -split "`n" | ForEach-Object { Write-Host "  $_" }
-            }
-        }
-        finally {
-            Remove-Item $importTempFile -Force -ErrorAction SilentlyContinue
+        $result = Invoke-Terraform -Arguments @('import', '-var-file=main.tfvars.json', $Address, $ResourceId)
+        $importExitCode = $result.ExitCode
+        $importText = @($result.StdOut, $result.StdErr) -join "`n"
+        if ($importText) {
+            $importText.TrimEnd() -split "`n" | ForEach-Object { Write-Host "  $_" }
         }
 
         if (Test-StateResourceId -Address $Address -ExpectedId $ResourceId) {
@@ -135,7 +164,7 @@ function Invoke-VerifiedTerraformImport {
         }
 
         if ($attempt -lt $MaxAttempts) {
-            & terraform state rm $Address 2>$null | Out-Null
+            Invoke-Terraform -Arguments @('state', 'rm', $Address) | Out-Null
         }
     }
 
@@ -156,7 +185,13 @@ $imports = @(
     @{ Address = 'azurerm_private_dns_zone_virtual_network_link.foundry'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Network/privateDnsZones/privatelink.services.ai.azure.com/virtualNetworkLinks/foundry-link" },
     @{ Address = 'azurerm_private_dns_zone_virtual_network_link.search'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Network/privateDnsZones/privatelink.search.windows.net/virtualNetworkLinks/search-link" },
     @{ Address = 'azurerm_private_endpoint.foundry'; Id = $foundryPrivateEndpointId },
-    @{ Address = 'azurerm_private_endpoint.search'; Id = $searchPrivateEndpointId }
+    @{ Address = 'azurerm_private_endpoint.search'; Id = $searchPrivateEndpointId },
+    @{ Address = 'azurerm_linux_web_app.bot["tax_pdf_forms"]'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/func-${namePrefix}-tax-bot-$locationSlug" },
+    @{ Address = 'azapi_resource.bot_registration["tax_pdf_forms"]'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.BotService/botServices/foundry-privatevnet-tax-bot" },
+    @{ Address = 'azapi_resource.bot_teams_channel["tax_pdf_forms"]'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.BotService/botServices/foundry-privatevnet-tax-bot/channels/MsTeamsChannel" },
+    @{ Address = 'azurerm_linux_web_app.bot["eng_design_ppt"]'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Web/sites/func-${namePrefix}-eng-bot-$locationSlug" },
+    @{ Address = 'azapi_resource.bot_registration["eng_design_ppt"]'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.BotService/botServices/foundry-privatevnet-eng-bot" },
+    @{ Address = 'azapi_resource.bot_teams_channel["eng_design_ppt"]'; Id = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.BotService/botServices/foundry-privatevnet-eng-bot/channels/MsTeamsChannel" }
 )
 
 if ($deployApi) {
@@ -225,7 +260,7 @@ foreach ($import in $imports) {
     if ([string]::IsNullOrWhiteSpace($resourceId)) {
         if ($isTracked) {
             Write-Host "Missing in Azure, removing stale state: $address"
-            & terraform state rm $address 2>$null | Out-Null
+            Invoke-Terraform -Arguments @('state', 'rm', $address) | Out-Null
         }
 
         Write-Host "No resource ID resolved, skipping: $address"
@@ -240,7 +275,7 @@ foreach ($import in $imports) {
         }
 
         Write-Host "State drift detected, replacing tracked resource: $address"
-        & terraform state rm $address 2>$null | Out-Null
+        Invoke-Terraform -Arguments @('state', 'rm', $address) | Out-Null
     }
 
     Write-Host "Importing $address"
