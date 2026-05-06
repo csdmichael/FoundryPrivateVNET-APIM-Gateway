@@ -1,9 +1,11 @@
 import json
+import logging
 import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -14,6 +16,9 @@ import config
 
 
 app = FastAPI(title="Foundry Private VNET Gateway API", version="1.0.0")
+
+logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
+logger = logging.getLogger("foundry_privatevnet_gateway")
 
 _allowed_origins = [
     origin.strip()
@@ -51,6 +56,9 @@ class ChatResponse(BaseModel):
     duration_ms: int
     sources: list[str]
     attempts: int
+    ok: bool = True
+    error: str | None = None
+    trace_id: str | None = None
 
 
 class BatchRequest(BaseModel):
@@ -181,35 +189,73 @@ async def _invoke_agent(prompt: str, use_case: str) -> tuple[str, list[str]]:
         "foundryProjectEndpoint": azure_settings["foundry"]["project_endpoint"],
     }
 
+    logger.info("Invoking agent for use_case=%s via %s", use_case, route_path)
+
     async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(f"{gateway_url}{route_path}", headers=headers, json=body)
 
     if response.status_code >= 400:
+        logger.error(
+            "APIM request failed for use_case=%s status=%s body=%s",
+            use_case,
+            response.status_code,
+            response.text[:1000],
+        )
         raise HTTPException(status_code=502, detail=f"APIM request failed: {response.status_code} {response.text}")
 
-    payload = response.json() if response.content else {}
+    try:
+        payload = response.json() if response.content else {}
+    except ValueError as exc:
+        logger.exception("APIM returned non-JSON payload for use_case=%s", use_case)
+        raise HTTPException(status_code=502, detail=f"APIM response was not valid JSON: {exc}") from exc
+
     text = _extract_response_text(payload)
     if not text:
+        logger.error("APIM response did not contain agent content for use_case=%s payload=%s", use_case, json.dumps(payload)[:1000])
         raise HTTPException(status_code=502, detail="APIM response did not contain agent content")
     return text, _extract_sources(payload)
 
 
-@app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def _build_chat_error_response(req: ChatRequest, started_at: float, exc: HTTPException) -> ChatResponse:
+    detail = exc.detail if isinstance(exc.detail, str) else json.dumps(exc.detail)
+    trace_id = str(uuid4())
+    duration = int((time.time() - started_at) * 1000)
+    logger.error(
+        "Teams chat request failed trace_id=%s use_case=%s prompt=%s detail=%s",
+        trace_id,
+        req.use_case,
+        req.prompt[:200],
+        detail,
+    )
+    return ChatResponse(
+        prompt=req.prompt,
+        response=f"Agent request failed. Trace ID: {trace_id}. Details: {detail}",
+        use_case=req.use_case,
+        duration_ms=duration,
+        sources=[],
+        attempts=1,
+        ok=False,
+        error=detail,
+        trace_id=trace_id,
+    )
 
 
-@app.get("/api/prompts")
-def get_prompts(use_case: str = "tax_pdf_forms") -> dict[str, list[dict[str, str]]]:
-    _require_use_case(use_case)
-    return SAMPLE_PROMPTS[use_case]
-
-
-@app.post("/api/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest) -> ChatResponse:
+async def _run_chat(req: ChatRequest, *, render_errors: bool) -> ChatResponse:
     _require_use_case(req.use_case)
     start = time.time()
-    response_text, sources = await _invoke_agent(req.prompt, req.use_case)
+    try:
+        response_text, sources = await _invoke_agent(req.prompt, req.use_case)
+    except HTTPException as exc:
+        if render_errors:
+            return _build_chat_error_response(req, start, exc)
+        raise
+    except Exception as exc:
+        logger.exception("Unexpected Teams chat request failure for use_case=%s", req.use_case)
+        wrapped_exc = HTTPException(status_code=502, detail=f"Unexpected upstream failure: {exc}")
+        if render_errors:
+            return _build_chat_error_response(req, start, wrapped_exc)
+        raise wrapped_exc from exc
+
     duration = int((time.time() - start) * 1000)
     return ChatResponse(
         prompt=req.prompt,
@@ -219,6 +265,37 @@ async def chat(req: ChatRequest) -> ChatResponse:
         sources=sources,
         attempts=1,
     )
+
+
+@app.get("/api/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/health")
+def health_root() -> dict[str, str]:
+    return health()
+
+
+@app.get("/api/prompts")
+def get_prompts(use_case: str = "tax_pdf_forms") -> dict[str, list[dict[str, str]]]:
+    _require_use_case(use_case)
+    return SAMPLE_PROMPTS[use_case]
+
+
+@app.get("/prompts")
+def get_prompts_root(use_case: str = "tax_pdf_forms") -> dict[str, list[dict[str, str]]]:
+    return get_prompts(use_case)
+
+
+@app.post("/api/chat", response_model=ChatResponse)
+async def chat(req: ChatRequest) -> ChatResponse:
+    return await _run_chat(req, render_errors=False)
+
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat_root(req: ChatRequest) -> ChatResponse:
+    return await _run_chat(req, render_errors=True)
 
 
 @app.post("/api/batch", response_model=BatchResponse)
@@ -236,6 +313,12 @@ async def batch_run(req: BatchRequest) -> BatchResponse:
             sources = []
             passed = False
             reason = "APIM invocation failed"
+        except Exception as exc:
+            logger.exception("Unexpected batch invocation failure for use_case=%s", req.use_case)
+            response_text = f"Unexpected upstream failure: {exc}"
+            sources = []
+            passed = False
+            reason = "Unexpected invocation failure"
         duration = int((time.time() - start) * 1000)
         results.append(
             BatchResultItem(
@@ -259,6 +342,11 @@ async def batch_run(req: BatchRequest) -> BatchResponse:
         accuracy_pct=accuracy_pct,
         results=results,
     )
+
+
+@app.post("/batch", response_model=BatchResponse)
+async def batch_run_root(req: BatchRequest) -> BatchResponse:
+    return await batch_run(req)
 
 
 @app.post("/api/feedback")

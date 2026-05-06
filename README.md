@@ -4,6 +4,25 @@ This project demonstrates **Azure API Management as an AI Gateway** in front of 
 
 The primary case study is **publishing AI agents to Microsoft Teams**. Each Foundry agent is surfaced as a Teams API-based message extension. Users open the compose box in any Teams chat, type a question, and receive a grounded AI response — all routed through APIM to a private Foundry project, with no additional backend App Service required.
 
+## Index
+
+- [Why APIM as the AI Gateway](#why-apim-as-the-ai-gateway)
+- [Architecture](#architecture)
+- [Technologies Used](#technologies-used)
+- [Project File Structure](#project-file-structure)
+- [Solution Overview](#solution-overview)
+- [Use Cases](#use-cases)
+- [Teams Agent Packages](#teams-agent-packages)
+- [Bot Registration](#bot-registration)
+- [APIM Configuration](#apim-configuration)
+- [AI Gateway Screenshots](#ai-gateway-screenshots)
+- [Configuration](#configuration)
+- [Deployment](#deployment)
+- [GitHub Actions Setup](#github-actions-setup)
+- [Source-Driven Search And Agent Provisioning](#source-driven-search-and-agent-provisioning)
+- [Sample Prompts and Testing](#sample-prompts-and-testing)
+- [Terraform Notes](#terraform-notes)
+
 ## Why APIM as the AI Gateway
 
 Traditional AI solutions add an intermediate API layer (FastAPI, Flask, App Service) between clients and the AI platform. This project removes that layer and puts APIM in that role:
@@ -130,6 +149,7 @@ FoundryPrivateVNET-APIM-Gateway/
     ├── architecture.png           # Solution architecture diagram
     ├── Teams-Bot-APIM-FoundryAgent.png  # End-to-end data flow diagram
     ├── best-practices.md          # APIM + Foundry best practices
+    ├── demo-script.md             # Live walkthrough script for demos
     ├── Prompts.txt                # Demo prompts
     └── Screenshots/               # Portal screenshots of APIM and Foundry gateway config
 ```
@@ -492,31 +512,6 @@ Important network prerequisite:
 
 - `aisearch-poc-myaacoub` must be able to reach `cosmos-ai-poc` through an approved Search shared private link resource named `cosmos-ai-poc-sql`.
 
-## Demo Script
-
-Use this sequence for a live walkthrough after the GitHub Actions deployment completes:
-
-> **Note:** The APIM gateway is deployed inside a private Azure VNet. Steps 1 and 2 below require network access to the VNet (e.g., from an Azure VM, Bastion, or VPN-connected machine).
-
-1. Test the APIM chat endpoint with a sample prompt (requires private VNet access):
-
-```powershell
-$apimBase = (Get-Content config/azure_resources.json | ConvertFrom-Json).apim.gateway_url
-$body = @{prompt="What does the Maine nonprofit certificate say about filing requirements?"} | ConvertTo-Json
-Invoke-RestMethod -Method Post -Uri "$apimBase/foundry-privatevnet-app/chat" -ContentType "application/json" -Body $body
-```
-
-2. Browse the Foundry OpenAI gateway path via the APIM gateway URL in `config/azure_resources.json` (requires private VNet access).
-3. Import the Teams agent packages and preview in Teams.
-4. Run the packaged smoke tests:
-
-```powershell
-./scripts/test-sample-prompts.ps1
-```
-
-5. Use prompts from [docs/Prompts.txt](docs/Prompts.txt) to demo both agents.
-6. Show the generated Teams packages under `Agent-Packages/`.
-
 ## Sample Prompts and Testing
 
 Both agents use only `azure_ai_search` as their grounding tool — no web search is allowed. Each agent queries its dedicated index on `aisearch-poc-myaacoub`:
@@ -526,25 +521,44 @@ Both agents use only `azure_ai_search` as their grounding tool — no web search
 | Tax-PDF-Forms-Agent | `tax-pdf-forms-index` | 388 |
 | Eng-Design-PPT-Agent | `eng-design-ppt-index` | 100 |
 
+The prompt sets below are intentionally anchored to the sample documents tracked in `config/document_config.json`:
+
+- `lq_tax_exemption_IN_001_yellow.pdf` — Indiana Tax Exemption Certificate
+- `lq_tax_exemption_WV_002_red.pdf` — West Virginia Resale Certificate
+- `engineering_design_review_001.pptx` — Engineering Design Review
+- `solution_architecture_update_002.pptx` — Solution Architecture Update
+
+For the full live walkthrough, use [docs/demo-script.md](docs/demo-script.md). For a copy/paste prompt-only version, use [docs/Prompts.txt](docs/Prompts.txt).
+
 ### Tax PDF Forms Agent
 
-| Prompt | Expected behavior |
-|--------|-------------------|
-| Summarize the renewal requirements for the Indiana tax exemption certificate. | Describes Form ST-105 and its validity period |
-| What does the Maine nonprofit certificate say about filing requirements? | References Section 501(c)(3) requirements and authorized official signatures |
-| Which fields require notarization in the Michigan exemption form? | Cites specific notarization fields from the Michigan form |
-| What documentation is required for a West Virginia resale certificate? | Lists required documentation for West Virginia resale |
-| What deadline is listed for the Alabama property tax exemption form? | Identifies deadline from the Alabama exemption form |
+| # | Prompt | Grounding target |
+|---|--------|------------------|
+| 1 | In `lq_tax_exemption_IN_001_yellow.pdf`, what is the stated purpose of the Indiana tax exemption certificate and who is expected to use it? | Indiana Tax Exemption Certificate |
+| 2 | List the purchaser or organization identification fields that must be completed on the Indiana tax exemption certificate. | Indiana Tax Exemption Certificate |
+| 3 | What exemption reason categories or qualifying uses are described in the Indiana tax exemption certificate? | Indiana Tax Exemption Certificate |
+| 4 | What instructions does the Indiana form give about how the seller should accept, keep, or rely on the certificate? | Indiana Tax Exemption Certificate |
+| 5 | Does the Indiana tax exemption certificate mention an expiration, renewal, or reuse condition? Summarize the exact guidance. | Indiana Tax Exemption Certificate |
+| 6 | What certifications, signature statements, or penalties are attached to signing the Indiana tax exemption certificate? | Indiana Tax Exemption Certificate |
+| 7 | In `lq_tax_exemption_WV_002_red.pdf`, what is the buyer certifying when using the West Virginia resale certificate? | West Virginia Resale Certificate |
+| 8 | Which permit numbers, business identifiers, or registration details are requested on the West Virginia resale certificate? | West Virginia Resale Certificate |
+| 9 | What limitations does the West Virginia resale certificate place on when the form may or may not be used? | West Virginia Resale Certificate |
+| 10 | What recordkeeping expectations, seller responsibilities, or misuse warnings are stated in the West Virginia resale certificate? | West Virginia Resale Certificate |
 
 ### Engineering Design PPT Agent
 
-| Prompt | Expected behavior |
-|--------|-------------------|
-| Summarize the system architecture described in the engineering design deck. | Describes frontend, backend, monitoring, and control components |
-| What trade-offs are mentioned for the preferred design option? | Lists environmental, traffic, property, and access trade-offs |
-| List any milestone dates or next steps called out in the presentations. | Extracts milestone dates and action items |
-| What architecture decisions are described in the engineering design presentations? | Summarizes key architecture choices |
-| Which risks or action items were called out in the design review decks? | Identifies risk items from design reviews |
+| # | Prompt | Grounding target |
+|---|--------|------------------|
+| 1 | In `engineering_design_review_001.pptx`, summarize the problem statement, project goal, and design scope described in the opening slides. | Engineering Design Review |
+| 2 | What system components, layers, or services are shown in `solution_architecture_update_002.pptx`? | Solution Architecture Update |
+| 3 | Which interfaces, data flows, or external integrations are called out between components in the architecture update deck? | Solution Architecture Update |
+| 4 | What alternative design options or solution approaches are compared in `engineering_design_review_001.pptx`? | Engineering Design Review |
+| 5 | What trade-offs or decision criteria are used to justify the preferred design in the engineering presentations? | Engineering Design Review and Solution Architecture Update |
+| 6 | Which assumptions, constraints, or dependencies are explicitly listed in the engineering decks? | Engineering Design Review and Solution Architecture Update |
+| 7 | What risks, open issues, or unresolved questions are highlighted in `engineering_design_review_001.pptx`? | Engineering Design Review |
+| 8 | What implementation milestones, owners, or next steps are listed in `solution_architecture_update_002.pptx`? | Solution Architecture Update |
+| 9 | Where do the decks mention performance, scalability, resiliency, or operational monitoring requirements? | Engineering Design Review and Solution Architecture Update |
+| 10 | Compare `engineering_design_review_001.pptx` with `solution_architecture_update_002.pptx`: what stayed the same, and what changed in the proposed architecture? | Engineering Design Review and Solution Architecture Update |
 
 ### Running tests
 

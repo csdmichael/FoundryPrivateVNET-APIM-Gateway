@@ -1,26 +1,27 @@
-﻿Foundry EndPoint for "foundryprivatevnet": https://foundryprivatevnet.services.ai.azure.com/api/projects/proj-default
-API Management:  /subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.ApiManagement/service/apim-poc-my
-AI Search for "aisearch-poc-myaacoub": /subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.Search/searchServices/aisearch-poc-myaacoub
+﻿Sample prompts for live demos and validation.
 
+Tax PDF Forms
 
-Create a private VNET in EastUS, private EndPoint for Foundry
-Update Foundry to use private vnet and private link
-Configure Foundry to use API Management as its AI Gateway
-Generate OpenAPI spec for Foundry API and register it in API Management
-In ai search called "aisearch-poc-myaacoub", create a clone of the following from ai search "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.Search/searchServices/ai-search-my":
-    - Data sources, Indexes, indexers for cosmos db data (eng-design-ppt, tax-pdf)
-    - create private endpoints, private links for "aisearch-poc-myaacoub" to have ai search within private vnet in east us
-In Foundry called "foundryprivatevnet", create a clone of the following agents from Foundry "https://001-ai-poc.services.ai.azure.com/api/projects/001-ai-proj":
-    - Eng-Design-PPT-Agent
-    - Tax-PDF-Forms-Agent
-Create Agent-Packages folder and package the 2 agents so I can install them in MS teams. 
-Add instructions in readme file on how to update manifest in packaged agents to route API calls via API Management
-Clone ui and api code from this github public repo: "https://github.com/csdmichael/AI-Search-Blob-Storage" and keep only code for 2 cosmos db use cases but point to foundry agents hosted in foundry "aisearch-poc-myaacoub" using APIM endpoints. Also register the api in apim and make ui code point to apim api endpoint 
-Draw architecture diagram including private vnet, private endpoints, ai search, cosmos db, API Management, foundry agent, apis and ui in a png diagram with Azure official Microsoft icons and store this architecture diagram in docs folder.
-Generate github actions workflow to deploy the whole solution, run it, test it and fix bugs.
-Refer architecture diagram in readme file. Include in readme.
-Document best practices for setting up Foundry in private vnet and adding APIM as AI gateway with references to Microsoft Learn articles
-Test project after provisioning all resources by running sample prompts.
-Created MIT license file to copyright for Michael Yaacoub at Microsoft.
-References:
-https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/ai-gateway?tabs=api-management&pivots=foundry-portal
+1. In lq_tax_exemption_IN_001_yellow.pdf, what is the stated purpose of the Indiana tax exemption certificate and who is expected to use it?
+2. List the purchaser or organization identification fields that must be completed on the Indiana tax exemption certificate.
+3. What exemption reason categories or qualifying uses are described in the Indiana tax exemption certificate?
+4. What instructions does the Indiana form give about how the seller should accept, keep, or rely on the certificate?
+5. Does the Indiana tax exemption certificate mention an expiration, renewal, or reuse condition? Summarize the exact guidance.
+6. What certifications, signature statements, or penalties are attached to signing the Indiana tax exemption certificate?
+7. In lq_tax_exemption_WV_002_red.pdf, what is the buyer certifying when using the West Virginia resale certificate?
+8. Which permit numbers, business identifiers, or registration details are requested on the West Virginia resale certificate?
+9. What limitations does the West Virginia resale certificate place on when the form may or may not be used?
+10. What recordkeeping expectations, seller responsibilities, or misuse warnings are stated in the West Virginia resale certificate?
+
+Engineering Design PPT
+
+1. In engineering_design_review_001.pptx, summarize the problem statement, project goal, and design scope described in the opening slides.
+2. What system components, layers, or services are shown in solution_architecture_update_002.pptx?
+3. Which interfaces, data flows, or external integrations are called out between components in the architecture update deck?
+4. What alternative design options or solution approaches are compared in engineering_design_review_001.pptx?
+5. What trade-offs or decision criteria are used to justify the preferred design in the engineering presentations?
+6. Which assumptions, constraints, or dependencies are explicitly listed in the engineering decks?
+7. What risks, open issues, or unresolved questions are highlighted in engineering_design_review_001.pptx?
+8. What implementation milestones, owners, or next steps are listed in solution_architecture_update_002.pptx?
+9. Where do the decks mention performance, scalability, resiliency, or operational monitoring requirements?
+10. Compare engineering_design_review_001.pptx with solution_architecture_update_002.pptx: what stayed the same, and what changed in the proposed architecture?
