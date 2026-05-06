@@ -103,16 +103,20 @@ $policyXml = @"
 "@
 
 $policyPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-openai-gateway-policy.xml'
-$policyXml | Set-Content -Path $policyPath -Encoding UTF8
+[System.IO.File]::WriteAllText($policyPath, $policyXml, [System.Text.UTF8Encoding]::new($false))
 
 $policyBodyPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-openai-gateway-policy.json'
-@{properties=@{format="rawxml"; value=$policyXml}} | ConvertTo-Json -Depth 5 | Set-Content -Path $policyBodyPath -Encoding UTF8
+$policyBodyJson = @{properties=@{format="rawxml"; value=$policyXml}} | ConvertTo-Json -Depth 5
+[System.IO.File]::WriteAllText($policyBodyPath, $policyBodyJson, [System.Text.UTF8Encoding]::new($false))
 Write-Host "Updating APIM gateway policy"
 $policyUrl = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.ApiManagement/service/$apimName/apis/$apimApiId/policies/policy?api-version=2024-05-01"
 $ErrorActionPreference = 'Continue'
-az rest --method PUT --headers Content-Type=application/json --url $policyUrl --body "@$policyBodyPath" 2>$null | Out-Null
+# az rest returns exit code 1 for non-JSON (XML) responses; capture output to detect real errors
+$policyResult = az rest --method PUT --headers Content-Type=application/json --url $policyUrl --body "@$policyBodyPath" 2>&1
 $ErrorActionPreference = 'Stop'
-if ($LASTEXITCODE -ne 0) { throw "Updating APIM policy for API '$apimApiId' failed with exit code $LASTEXITCODE." }
+# Only fail if a real HTTP error (4xx/5xx) is present, not az CLI encoding bugs
+$httpError = $policyResult | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | Where-Object { $_.Exception.Message -match '(BadRequest|Unauthorized|Forbidden|NotFound|Conflict|InternalServerError|\b[45]\d{2}\b)' }
+if ($httpError) { throw "Updating APIM policy for API '$apimApiId' failed: $httpError" }
 
 $connectionUrl = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.CognitiveServices/accounts/$foundryAccountName/projects/$projectName/connections/$connectionName?api-version=2025-04-01-preview"
 $connectionPayload = @{
@@ -132,10 +136,13 @@ $connectionPayload = @{
 }
 
 $payloadPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-apim-gateway-connection.json'
-$connectionPayload | ConvertTo-Json -Depth 10 | Set-Content -Path $payloadPath -Encoding UTF8
+$connectionPayload | ConvertTo-Json -Depth 10 | ForEach-Object { [System.IO.File]::WriteAllText($payloadPath, $_, [System.Text.UTF8Encoding]::new($false)) }
 Write-Host "Creating or updating Foundry APIM connection '$connectionName'"
-az rest --method put --headers Content-Type=application/json --url $connectionUrl --body "@$payloadPath" | Out-Null
-Assert-LastExitCode "Creating or updating Foundry APIM connection '$connectionName'"
+$ErrorActionPreference = 'Continue'
+$connResult = az rest --method put --headers Content-Type=application/json --url $connectionUrl --body "@$payloadPath" 2>&1
+$ErrorActionPreference = 'Stop'
+$realConnError = $connResult | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | Where-Object { $_.Exception.Message -match '(BadRequest|Unauthorized|Forbidden|NotFound|Conflict|InternalServerError|\b[45]\d{2}\b)' }
+if ($realConnError) { throw "Creating or updating Foundry APIM connection '$connectionName' failed: $realConnError" }
 
 Write-Host "Ensured Foundry AI gateway via APIM: $gatewayUrl"
 
@@ -149,8 +156,11 @@ $agentsGatewayUrl = "$apimGatewayUrl/$agentsApiPath"
 
 Write-Host "`nConfiguring Foundry Agents API proxy via APIM"
 
+$ErrorActionPreference = 'Continue'
 $agentsApiExists = az apim api show --resource-group $resourceGroup --service-name $apimName --api-id $agentsApiId -o json 2>$null
-if ($LASTEXITCODE -ne 0 -or -not $agentsApiExists) {
+$agentsApiExitCode = $LASTEXITCODE
+$ErrorActionPreference = 'Stop'
+if ($agentsApiExitCode -ne 0 -or -not $agentsApiExists) {
     Write-Host "Creating APIM Foundry Agents API"
     az apim api create --resource-group $resourceGroup --service-name $apimName --api-id $agentsApiId --path $agentsApiPath --display-name "Foundry Agents Gateway" --protocols https --service-url $agentsBackend --subscription-required false -o none
     Assert-LastExitCode "Creating APIM API '$agentsApiId'"
@@ -169,8 +179,11 @@ $agentsOps = @(
     @{ Id = 'agents-patch';  Method = 'PATCH';  Display = 'Proxy Agents PATCH' }
 )
 foreach ($op in $agentsOps) {
+    $ErrorActionPreference = 'Continue'
     $existingOp = az apim api operation show --resource-group $resourceGroup --service-name $apimName --api-id $agentsApiId --operation-id $op.Id -o json 2>$null
-    if ($LASTEXITCODE -ne 0 -or -not $existingOp) {
+    $opExitCode = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
+    if ($opExitCode -ne 0 -or -not $existingOp) {
         az apim api operation create --resource-group $resourceGroup --service-name $apimName --api-id $agentsApiId --operation-id $op.Id --display-name $op.Display --method $op.Method --url-template "/*" -o none
         Assert-LastExitCode "Creating APIM $($op.Method) proxy operation for agents"
     }
@@ -200,10 +213,14 @@ $agentsPolicyXml = @"
 "@
 
 $agentsPolicyBodyPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-agents-gateway-policy.json'
-@{properties=@{format="rawxml"; value=$agentsPolicyXml}} | ConvertTo-Json -Depth 5 | Set-Content -Path $agentsPolicyBodyPath -Encoding UTF8
+$agentsPolicyBodyJson = @{properties=@{format="rawxml"; value=$agentsPolicyXml}} | ConvertTo-Json -Depth 5
+[System.IO.File]::WriteAllText($agentsPolicyBodyPath, $agentsPolicyBodyJson, [System.Text.UTF8Encoding]::new($false))
 Write-Host "Updating APIM Agents gateway policy"
 $agentsPolicyUrl = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.ApiManagement/service/$apimName/apis/$agentsApiId/policies/policy?api-version=2024-05-01"
-az rest --method PUT --headers Content-Type=application/json --url $agentsPolicyUrl --body "@$agentsPolicyBodyPath" | Out-Null
-Assert-LastExitCode "Updating APIM policy for agents API '$agentsApiId'"
+$ErrorActionPreference = 'Continue'
+$agentsPolicyResult = az rest --method PUT --headers Content-Type=application/json --url $agentsPolicyUrl --body "@$agentsPolicyBodyPath" 2>&1
+$ErrorActionPreference = 'Stop'
+$realAgentsError = $agentsPolicyResult | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] } | Where-Object { $_.Exception.Message -match '(BadRequest|Unauthorized|Forbidden|NotFound|Conflict|InternalServerError|\b[45]\d{2}\b)' }
+if ($realAgentsError) { throw "Updating APIM policy for agents API '$agentsApiId' failed: $realAgentsError" }
 
 Write-Host "Ensured Foundry Agents API gateway via APIM: $agentsGatewayUrl"
