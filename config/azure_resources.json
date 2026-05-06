@@ -14,7 +14,9 @@
     "api_path": "foundry-privatevnet-app",
     "product_name": "foundry-privatevnet-product",
     "backend_api_name": "foundry-privatevnet-app-api",
-    "foundry_api_name": "foundry-privatevnet-agent-gateway"
+    "foundry_api_name": "foundry-privatevnet-agent-gateway",
+    "foundry_agents_api_name": "foundry-agents-gateway",
+    "foundry_agents_api_path": "foundry-agents"
   },
   "search": {
     "target_service_name": "aisearch-poc-myaacoub",

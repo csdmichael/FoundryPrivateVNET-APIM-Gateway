@@ -1,127 +1,140 @@
-{
-  "$schema": "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json",
-  "manifestVersion": "devPreview",
-  "version": "1.0.2",
-  "id": "3d33b58f-6c93-48c4-b8b6-6da36fd8d111",
-  "name": {
-    "short": "Tax PDF Forms Agent",
-    "full": "Tax PDF Forms Agent via APIM"
-  },
-  "developer": {
-    "name": "Michael Yaacoub at Microsoft",
-    "websiteUrl": "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs/support.md",
-    "privacyUrl": "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs/privacy-policy.md",
-    "termsOfUseUrl": "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs/terms-of-use.md"
-  },
-  "description": {
-    "short": "Foundry agent package for tax PDF forms.",
-    "full": "Teams package for the Tax PDF Forms agent routed through Azure API Management."
-  },
-  "icons": {
-    "outline": "outline.png",
-    "color": "color.png"
-  },
-  "accentColor": "#0F6CBD",
-  "bots": [
-    {
-      "botId": "9590abf6-d0df-477b-b16c-1298dfbed5cc",
-      "supportsSessions": true,
-      "scopes": ["personal", "team", "groupChat", "copilot"],
-      "commandLists": [
-        {
-          "scopes": ["personal", "copilot"],
-          "commands": [
-            {
-              "title": "Ask",
-              "description": "Ask a question about tax PDF forms"
-            },
-            {
-              "title": "Indiana fields",
-              "description": "Show the Indiana certificate fields",
-              "type": "prompt",
-              "prompt": "List the purchaser or organization identification fields that must be completed on the Indiana tax exemption certificate."
-            },
-            {
-              "title": "Indiana exemptions",
-              "description": "Summarize Indiana exemption reasons",
-              "type": "prompt",
-              "prompt": "What exemption reason categories or qualifying uses are described in the Indiana tax exemption certificate?"
-            },
-            {
-              "title": "Indiana penalties",
-              "description": "Explain signature penalties",
-              "type": "prompt",
-              "prompt": "What certifications, signature statements, or penalties are attached to signing the Indiana tax exemption certificate?"
-            },
-            {
-              "title": "WV buyer cert",
-              "description": "Explain the West Virginia buyer certification",
-              "type": "prompt",
-              "prompt": "In lq_tax_exemption_WV_002_red.pdf, what is the buyer certifying when using the West Virginia resale certificate?"
-            },
-            {
-              "title": "WV seller warnings",
-              "description": "Summarize seller responsibilities",
-              "type": "prompt",
-              "prompt": "What recordkeeping expectations, seller responsibilities, or misuse warnings are stated in the West Virginia resale certificate?"
-            }
-          ]
-        }
-      ]
-    }
-  ],
-  "copilotAgents": {
-    "customEngineAgents": [
-      {
-        "id": "9590abf6-d0df-477b-b16c-1298dfbed5cc",
-        "type": "bot",
-        "disclaimer": {
-          "text": "Answers are grounded in the configured tax PDF documents and may reflect deployment-time search data."
-        }
-      }
-    ]
-  },
-  "composeExtensions": [
-    {
-      "composeExtensionType": "apiBased",
-      "apiSpecificationFile": "apiSpecificationFile.json",
-      "commands": [
-        {
-          "id": "chatWithAgent",
-          "type": "query",
-          "title": "Ask Tax PDF Forms",
-          "description": "Ask a question about tax PDF forms",
-          "samplePrompts": [
-            {
-              "text": "What identification fields must be completed on the Indiana tax exemption certificate?"
-            },
-            {
-              "text": "What exemption reasons are listed in the Indiana tax exemption certificate?"
-            },
-            {
-              "text": "What certifications or penalties are attached to signing the Indiana exemption form?"
-            },
-            {
-              "text": "What is the buyer certifying when using the West Virginia resale certificate?"
-            },
-            {
-              "text": "What seller recordkeeping or misuse warnings appear on the West Virginia resale certificate?"
-            }
-          ],
-          "initialRun": false,
-          "apiResponseRenderingTemplateFile": "responseRenderingTemplate.json",
-          "parameters": [
-            {
-              "name": "prompt",
-              "title": "Question",
-              "description": "Your question about tax PDF forms",
-              "inputType": "text"
-            }
-          ]
-        }
-      ]
-    }
-  ],
-  "permissions": ["identity", "messageTeamMembers"],
-  "validDomains": ["ai-gateway-apim-poc-my.azure-api.net"]
+﻿{
+    "$schema":  "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json",
+    "manifestVersion":  "devPreview",
+    "version":  "1.0.4",
+    "id":  "3d33b58f-6c93-48c4-b8b6-6da36fd8d111",
+    "name":  {
+                 "short":  "Tax PDF Forms Agent",
+                 "full":  "Tax PDF Forms Agent via APIM"
+             },
+    "developer":  {
+                      "name":  "Michael Yaacoub at Microsoft",
+                      "websiteUrl":  "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs/support.md",
+                      "privacyUrl":  "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs/privacy-policy.md",
+                      "termsOfUseUrl":  "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs/terms-of-use.md"
+                  },
+    "description":  {
+                        "short":  "Foundry agent package for tax PDF forms.",
+                        "full":  "Teams package for the Tax PDF Forms agent routed through Azure API Management."
+                    },
+    "icons":  {
+                  "outline":  "outline.png",
+                  "color":  "color.png"
+              },
+    "accentColor":  "#0F6CBD",
+    "bots":  [
+                 {
+                     "botId":  "9590abf6-d0df-477b-b16c-1298dfbed5cc",
+                     "supportsSessions":  true,
+                     "scopes":  [
+                                    "personal",
+                                    "team",
+                                    "groupChat",
+                                    "copilot"
+                                ],
+                     "commandLists":  [
+                                          {
+                                              "scopes":  [
+                                                             "personal",
+                                                             "copilot"
+                                                         ],
+                                              "commands":  [
+                                                               {
+                                                                   "description":  "Ask a question about tax PDF forms",
+                                                                   "title":  "Ask"
+                                                               },
+                                                               {
+                                                                   "title":  "In lq_tax_exemption_IN_001_ye...",
+                                                                   "description":  "In lq_tax_exemption_IN_001_yellow",
+                                                                   "prompt":  "In lq_tax_exemption_IN_001_yellow.pdf, what is the stated purpose of the Indiana tax exemption certificate and who is expected to use it?",
+                                                                   "type":  "prompt"
+                                                               },
+                                                               {
+                                                                   "title":  "List the purchaser or",
+                                                                   "description":  "List the purchaser or organization identification fields that must be completed on the Indiana tax exemption certificate",
+                                                                   "prompt":  "List the purchaser or organization identification fields that must be completed on the Indiana tax exemption certificate.",
+                                                                   "type":  "prompt"
+                                                               },
+                                                               {
+                                                                   "title":  "What exemption reason categories",
+                                                                   "description":  "What exemption reason categories or qualifying uses are described in the Indiana tax exemption certificate",
+                                                                   "prompt":  "What exemption reason categories or qualifying uses are described in the Indiana tax exemption certificate?",
+                                                                   "type":  "prompt"
+                                                               },
+                                                               {
+                                                                   "title":  "What instructions does the",
+                                                                   "description":  "What instructions does the Indiana form give about how the seller should accept, keep, or rely on the certificate",
+                                                                   "prompt":  "What instructions does the Indiana form give about how the seller should accept, keep, or rely on the certificate?",
+                                                                   "type":  "prompt"
+                                                               },
+                                                               {
+                                                                   "title":  "Does the Indiana tax",
+                                                                   "description":  "Does the Indiana tax exemption certificate mention an expiration, renewal, or reuse condition",
+                                                                   "prompt":  "Does the Indiana tax exemption certificate mention an expiration, renewal, or reuse condition? Summarize the exact guidance.",
+                                                                   "type":  "prompt"
+                                                               }
+                                                           ]
+                                          }
+                                      ]
+                 }
+             ],
+    "copilotAgents":  {
+                          "customEngineAgents":  [
+                                                     {
+                                                         "id":  "9590abf6-d0df-477b-b16c-1298dfbed5cc",
+                                                         "type":  "bot",
+                                                         "disclaimer":  {
+                                                                            "text":  "Answers are grounded in the configured tax PDF documents and may reflect deployment-time search data."
+                                                                        }
+                                                     }
+                                                 ]
+                      },
+    "composeExtensions":  [
+                              {
+                                  "composeExtensionType":  "apiBased",
+                                  "apiSpecificationFile":  "apiSpecificationFile.json",
+                                  "commands":  [
+                                                   {
+                                                       "id":  "chatWithAgent",
+                                                       "type":  "query",
+                                                       "title":  "Ask Tax PDF Forms",
+                                                       "description":  "Ask a question about tax PDF forms",
+                                                       "samplePrompts":  [
+                                                                             {
+                                                                                 "text":  "In lq_tax_exemption_IN_001_yellow.pdf, what is the stated purpose of the Indiana tax exemption certificate and who is expected to use it?"
+                                                                             },
+                                                                             {
+                                                                                 "text":  "List the purchaser or organization identification fields that must be completed on the Indiana tax exemption certificate."
+                                                                             },
+                                                                             {
+                                                                                 "text":  "What exemption reason categories or qualifying uses are described in the Indiana tax exemption certificate?"
+                                                                             },
+                                                                             {
+                                                                                 "text":  "What instructions does the Indiana form give about how the seller should accept, keep, or rely on the certificate?"
+                                                                             },
+                                                                             {
+                                                                                 "text":  "Does the Indiana tax exemption certificate mention an expiration, renewal, or reuse condition? Summarize the exact guidance."
+                                                                             }
+                                                                         ],
+                                                       "initialRun":  false,
+                                                       "apiResponseRenderingTemplateFile":  "responseRenderingTemplate.json",
+                                                       "parameters":  [
+                                                                          {
+                                                                              "name":  "prompt",
+                                                                              "title":  "Question",
+                                                                              "description":  "Your question about tax PDF forms",
+                                                                              "inputType":  "text"
+                                                                          }
+                                                                      ]
+                                                   }
+                                               ]
+                              }
+                          ],
+    "permissions":  [
+                        "identity",
+                        "messageTeamMembers"
+                    ],
+    "validDomains":  [
+                         "ai-gateway-apim-poc-my.azure-api.net"
+                     ]
 }

@@ -1,0 +1,54 @@
+﻿{
+    "tax_pdf_forms":  {
+                          "Id":  "asst_BsJXPXZlz7T7P8RXvq3jT9CN",
+                          "Name":  "Tax-PDF-Forms-Agent",
+                          "ToolResources":  {
+                                                "azure_ai_search":  {
+                                                                        "indexes":  [
+                                                                                        {
+                                                                                            "index_connection_id":  "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.CognitiveServices/accounts/002-ai-poc-private/projects/proj-default/connections/aisearchpocmyaacoub",
+                                                                                            "index_name":  "tax-pdf-forms-index",
+                                                                                            "query_type":  "semantic",
+                                                                                            "top_k":  15,
+                                                                                            "filter":  null,
+                                                                                            "index_asset_id":  null
+                                                                                        }
+                                                                                    ]
+                                                                    }
+                                            },
+                          "Instructions":  "Answer only with information grounded in the cloned tax PDF search index. Cite file-level evidence returned by the Foundry agent.\n\nGROUNDING POLICY: Always answer strictly from azure_ai_search retrieved chunks. Never use web search, browser search, or any external source. Each chunk starts with \u0027Document: \u003cfileName\u003e\u0027 â use that fileName for citations. Never cite a URL, blob path, image asset, or external viewer; cite only the document fileName found in the retrieved chunk metadata. If relevant chunks are present, provide the best grounded answer instead of generic fallback text. When multiple chunks reference the same document, synthesize information across them. For field values, copy the EXACT text from the retrieved chunk content. When queried about a specific state or jurisdiction, prioritize chunks matching that state. If chunks contain relevant information, do NOT return a generic not-found response. Every factual sentence must include at least one citation in the format [fileNameâ index-name]. For deadline, expiration, validity, or renewal questions, inspect sections such as Exemption Details, Certification \u0026 Signature, Tax Information, or Full Document Summary for related dates and certificate metadata. If the documents do not state an explicit deadline or renewal workflow but do contain related dates, answer with those exact grounded dates and clearly state that no separate deadline or renewal instruction was found in the retrieved documents. Prefer a cited partial answer over an uncited generalization whenever the retrieved chunks are relevant.",
+                          "Tools":  [
+                                        {
+                                            "type":  "azure_ai_search"
+                                        }
+                                    ],
+                          "Temperature":  0.0,
+                          "Model":  "gpt-4.1"
+                      },
+    "eng_design_ppt":  {
+                           "Id":  "asst_ugByfV3z5NqzmReCPw7BF1bM",
+                           "Name":  "Eng-Design-PPT-Agent",
+                           "ToolResources":  {
+                                                 "azure_ai_search":  {
+                                                                         "indexes":  [
+                                                                                         {
+                                                                                             "index_connection_id":  "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.CognitiveServices/accounts/002-ai-poc-private/projects/proj-default/connections/aisearchpocmyaacoub",
+                                                                                             "index_name":  "eng-design-ppt-index",
+                                                                                             "query_type":  "semantic",
+                                                                                             "top_k":  15,
+                                                                                             "filter":  null,
+                                                                                             "index_asset_id":  null
+                                                                                         }
+                                                                                     ]
+                                                                     }
+                                             },
+                           "Instructions":  "Answer only with information grounded in the cloned engineering design presentation search index. Cite file-level evidence returned by the Foundry agent.\n\nGROUNDING POLICY: Always answer strictly from azure_ai_search retrieved chunks. Never use web search, browser search, or any external source. Each chunk starts with \u0027Document: \u003cfileName\u003e\u0027 â use that fileName for citations. Never cite a URL, blob path, image asset, or external viewer; cite only the document fileName found in the retrieved chunk metadata. If relevant chunks are present, provide the best grounded answer instead of generic fallback text. When multiple chunks reference the same document, synthesize information across them. For field values, copy the EXACT text from the retrieved chunk content. When queried about a specific state or jurisdiction, prioritize chunks matching that state. If chunks contain relevant information, do NOT return a generic not-found response. Every factual sentence must include at least one citation in the format [fileNameâ index-name]. For deadline, expiration, validity, or renewal questions, inspect sections such as Exemption Details, Certification \u0026 Signature, Tax Information, or Full Document Summary for related dates and certificate metadata. If the documents do not state an explicit deadline or renewal workflow but do contain related dates, answer with those exact grounded dates and clearly state that no separate deadline or renewal instruction was found in the retrieved documents. Prefer a cited partial answer over an uncited generalization whenever the retrieved chunks are relevant.",
+                           "Tools":  [
+                                         {
+                                             "type":  "azure_ai_search"
+                                         }
+                                     ],
+                           "Temperature":  0.0,
+                           "Model":  "gpt-4.1"
+                       }
+}

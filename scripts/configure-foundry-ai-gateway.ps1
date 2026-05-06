@@ -109,8 +109,10 @@ $policyBodyPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-openai-ga
 @{properties=@{format="rawxml"; value=$policyXml}} | ConvertTo-Json -Depth 5 | Set-Content -Path $policyBodyPath -Encoding UTF8
 Write-Host "Updating APIM gateway policy"
 $policyUrl = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.ApiManagement/service/$apimName/apis/$apimApiId/policies/policy?api-version=2024-05-01"
-az rest --method PUT --headers Content-Type=application/json --url $policyUrl --body "@$policyBodyPath" | Out-Null
-Assert-LastExitCode "Updating APIM policy for API '$apimApiId'"
+$ErrorActionPreference = 'Continue'
+az rest --method PUT --headers Content-Type=application/json --url $policyUrl --body "@$policyBodyPath" 2>$null | Out-Null
+$ErrorActionPreference = 'Stop'
+if ($LASTEXITCODE -ne 0) { throw "Updating APIM policy for API '$apimApiId' failed with exit code $LASTEXITCODE." }
 
 $connectionUrl = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.CognitiveServices/accounts/$foundryAccountName/projects/$projectName/connections/$connectionName?api-version=2025-04-01-preview"
 $connectionPayload = @{
@@ -136,3 +138,72 @@ az rest --method put --headers Content-Type=application/json --url $connectionUr
 Assert-LastExitCode "Creating or updating Foundry APIM connection '$connectionName'"
 
 Write-Host "Ensured Foundry AI gateway via APIM: $gatewayUrl"
+
+# ── Foundry Agents API proxy ────────────────────────────────────────────────
+# Proxies the Foundry project's Agents/Assistants REST API through APIM so
+# agent CRUD (create, list, delete) also runs through the managed gateway.
+$agentsApiId   = $config.apim.foundry_agents_api_name
+$agentsApiPath = $config.apim.foundry_agents_api_path
+$agentsBackend = "https://$foundryAccountName.services.ai.azure.com"
+$agentsGatewayUrl = "$apimGatewayUrl/$agentsApiPath"
+
+Write-Host "`nConfiguring Foundry Agents API proxy via APIM"
+
+$agentsApiExists = az apim api show --resource-group $resourceGroup --service-name $apimName --api-id $agentsApiId -o json 2>$null
+if ($LASTEXITCODE -ne 0 -or -not $agentsApiExists) {
+    Write-Host "Creating APIM Foundry Agents API"
+    az apim api create --resource-group $resourceGroup --service-name $apimName --api-id $agentsApiId --path $agentsApiPath --display-name "Foundry Agents Gateway" --protocols https --service-url $agentsBackend --subscription-required false -o none
+    Assert-LastExitCode "Creating APIM API '$agentsApiId'"
+}
+else {
+    Write-Host "Updating APIM Foundry Agents API"
+    az apim api update --resource-group $resourceGroup --service-name $apimName --api-id $agentsApiId --set path=$agentsApiPath serviceUrl=$agentsBackend subscriptionRequired=false -o none
+    Assert-LastExitCode "Updating APIM API '$agentsApiId'"
+}
+
+# Wildcard proxy operations for GET, POST, DELETE, PATCH
+$agentsOps = @(
+    @{ Id = 'agents-get';    Method = 'GET';    Display = 'Proxy Agents GET' },
+    @{ Id = 'agents-post';   Method = 'POST';   Display = 'Proxy Agents POST' },
+    @{ Id = 'agents-delete'; Method = 'DELETE'; Display = 'Proxy Agents DELETE' },
+    @{ Id = 'agents-patch';  Method = 'PATCH';  Display = 'Proxy Agents PATCH' }
+)
+foreach ($op in $agentsOps) {
+    $existingOp = az apim api operation show --resource-group $resourceGroup --service-name $apimName --api-id $agentsApiId --operation-id $op.Id -o json 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $existingOp) {
+        az apim api operation create --resource-group $resourceGroup --service-name $apimName --api-id $agentsApiId --operation-id $op.Id --display-name $op.Display --method $op.Method --url-template "/*" -o none
+        Assert-LastExitCode "Creating APIM $($op.Method) proxy operation for agents"
+    }
+}
+
+# Policy: managed identity auth to Foundry services.ai.azure.com
+$agentsPolicyXml = @"
+<policies>
+  <inbound>
+    <base />
+    <authentication-managed-identity resource="https://cognitiveservices.azure.com" />
+    <set-header name="Host" exists-action="override">
+      <value>$foundryAccountName.services.ai.azure.com</value>
+    </set-header>
+    <set-backend-service base-url="$agentsBackend" />
+  </inbound>
+  <backend>
+    <base />
+  </backend>
+  <outbound>
+    <base />
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>
+"@
+
+$agentsPolicyBodyPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-agents-gateway-policy.json'
+@{properties=@{format="rawxml"; value=$agentsPolicyXml}} | ConvertTo-Json -Depth 5 | Set-Content -Path $agentsPolicyBodyPath -Encoding UTF8
+Write-Host "Updating APIM Agents gateway policy"
+$agentsPolicyUrl = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.ApiManagement/service/$apimName/apis/$agentsApiId/policies/policy?api-version=2024-05-01"
+az rest --method PUT --headers Content-Type=application/json --url $agentsPolicyUrl --body "@$agentsPolicyBodyPath" | Out-Null
+Assert-LastExitCode "Updating APIM policy for agents API '$agentsApiId'"
+
+Write-Host "Ensured Foundry Agents API gateway via APIM: $agentsGatewayUrl"

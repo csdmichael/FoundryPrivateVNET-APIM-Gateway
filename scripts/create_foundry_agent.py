@@ -32,6 +32,24 @@ SEARCH_TOP_K = int(os.environ.get("SEARCH_TOP_K", "15"))
 QUERY_TYPE = AzureAISearchQueryType.SEMANTIC
 QUERY_TYPE_LABEL = "semantic"
 
+
+def _resolve_endpoint() -> str:
+    """Return the APIM-proxied Foundry agents endpoint when available, else the direct endpoint."""
+    if os.environ.get("FOUNDRY_DIRECT", "").strip().lower() in ("1", "true"):
+        return PROJECT_ENDPOINT
+
+    apim = AZURE_RESOURCES.get("apim", {})
+    agents_path = apim.get("foundry_agents_api_path")
+    gateway_url = apim.get("gateway_url", "").rstrip("/")
+    if agents_path and gateway_url:
+        # APIM proxies to https://{account}.services.ai.azure.com;
+        # the SDK path after the gateway URL mirrors the original Foundry path.
+        project_suffix = PROJECT_ENDPOINT.split(".services.ai.azure.com", 1)[-1]
+        endpoint = f"{gateway_url}/{agents_path}{project_suffix}"
+        return endpoint
+
+    return PROJECT_ENDPOINT
+
 _GROUNDING_SUFFIX = (
     "\n\nGROUNDING POLICY: "
     "Always answer strictly from azure_ai_search retrieved chunks. "
@@ -106,9 +124,13 @@ def _build_agent(client: AgentsClient, connection_id: str):
 
 
 def main() -> None:
-    print(f"Connecting to Foundry project: {PROJECT_ENDPOINT}")
+    endpoint = _resolve_endpoint()
+    is_apim = endpoint != PROJECT_ENDPOINT
+    print(f"Connecting to Foundry project: {endpoint}")
+    if is_apim:
+        print("  (routed via APIM gateway)")
     credential = DefaultAzureCredential()
-    client = AgentsClient(endpoint=PROJECT_ENDPOINT, credential=credential)
+    client = AgentsClient(endpoint=endpoint, credential=credential)
     connection_id = _connection_id()
 
     existing = _get_agent_by_name(client, AGENT_NAME)

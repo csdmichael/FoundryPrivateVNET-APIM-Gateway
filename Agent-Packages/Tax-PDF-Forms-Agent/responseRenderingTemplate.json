@@ -1,21 +1,21 @@
-{
-  "version": "devPreview",
-  "jsonPath": "$",
-  "responseLayout": "list",
-  "responseCardTemplate": {
-    "type": "AdaptiveCard",
-    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-    "version": "1.5",
-    "body": [
-      {
-        "type": "TextBlock",
-        "text": "${response}",
-        "wrap": true
-      }
-    ]
-  },
-  "previewCardTemplate": {
-    "title": "Tax PDF Forms Agent",
-    "text": "${response}"
-  }
+﻿{
+    "version":  "devPreview",
+    "jsonPath":  "$",
+    "responseLayout":  "list",
+    "responseCardTemplate":  {
+                                 "type":  "AdaptiveCard",
+                                 "$schema":  "http://adaptivecards.io/schemas/adaptive-card.json",
+                                 "version":  "1.5",
+                                 "body":  [
+                                              {
+                                                  "type":  "TextBlock",
+                                                  "text":  "${response}",
+                                                  "wrap":  true
+                                              }
+                                          ]
+                             },
+    "previewCardTemplate":  {
+                                "title":  "Tax PDF Forms Agent",
+                                "text":  "${response}"
+                            }
 }

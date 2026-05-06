@@ -1,127 +1,140 @@
-{
-  "$schema": "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json",
-  "manifestVersion": "devPreview",
-  "version": "1.0.2",
-  "id": "2f3f3c91-1f4f-4c0f-b40c-1b6f6f1b1222",
-  "name": {
-    "short": "Eng Design PPT Agent",
-    "full": "Engineering Design PPT Agent via APIM"
-  },
-  "developer": {
-    "name": "Michael Yaacoub at Microsoft",
-    "websiteUrl": "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs/support.md",
-    "privacyUrl": "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs/privacy-policy.md",
-    "termsOfUseUrl": "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs/terms-of-use.md"
-  },
-  "description": {
-    "short": "Foundry agent package for engineering design presentations.",
-    "full": "Teams package for the Engineering Design PPT agent routed through Azure API Management."
-  },
-  "icons": {
-    "outline": "outline.png",
-    "color": "color.png"
-  },
-  "accentColor": "#0F6CBD",
-  "bots": [
-    {
-      "botId": "fdacafcf-352a-4443-8805-402f5780ae67",
-      "supportsSessions": true,
-      "scopes": ["personal", "team", "groupChat", "copilot"],
-      "commandLists": [
-        {
-          "scopes": ["personal", "copilot"],
-          "commands": [
-            {
-              "title": "Ask",
-              "description": "Ask a question about engineering design presentations"
-            },
-            {
-              "title": "Design scope",
-              "description": "Summarize the opening design scope",
-              "type": "prompt",
-              "prompt": "In engineering_design_review_001.pptx, summarize the problem statement, project goal, and design scope described in the opening slides."
-            },
-            {
-              "title": "Architecture layers",
-              "description": "List architecture components",
-              "type": "prompt",
-              "prompt": "What system components, layers, or services are shown in solution_architecture_update_002.pptx?"
-            },
-            {
-              "title": "Interfaces",
-              "description": "Show interfaces and data flows",
-              "type": "prompt",
-              "prompt": "Which interfaces, data flows, or external integrations are called out between components in the architecture update deck?"
-            },
-            {
-              "title": "Risks",
-              "description": "Highlight open risks and issues",
-              "type": "prompt",
-              "prompt": "What risks, open issues, or unresolved questions are highlighted in engineering_design_review_001.pptx?"
-            },
-            {
-              "title": "Compare decks",
-              "description": "Compare both engineering decks",
-              "type": "prompt",
-              "prompt": "Compare engineering_design_review_001.pptx with solution_architecture_update_002.pptx: what stayed the same, and what changed in the proposed architecture?"
-            }
-          ]
-        }
-      ]
-    }
-  ],
-  "copilotAgents": {
-    "customEngineAgents": [
-      {
-        "id": "fdacafcf-352a-4443-8805-402f5780ae67",
-        "type": "bot",
-        "disclaimer": {
-          "text": "Answers are grounded in the configured engineering presentation documents and may reflect deployment-time search data."
-        }
-      }
-    ]
-  },
-  "composeExtensions": [
-    {
-      "composeExtensionType": "apiBased",
-      "apiSpecificationFile": "apiSpecificationFile.json",
-      "commands": [
-        {
-          "id": "chatWithAgent",
-          "type": "query",
-          "title": "Ask Eng Design PPT",
-          "description": "Ask a question about engineering design presentations",
-          "samplePrompts": [
-            {
-              "text": "Summarize the problem statement and design scope in engineering_design_review_001.pptx."
-            },
-            {
-              "text": "What system components or layers are shown in solution_architecture_update_002.pptx?"
-            },
-            {
-              "text": "What interfaces or data flows are called out between components in the architecture update deck?"
-            },
-            {
-              "text": "What risks or open issues are highlighted in engineering_design_review_001.pptx?"
-            },
-            {
-              "text": "Compare the two engineering decks: what stayed the same and what changed?"
-            }
-          ],
-          "initialRun": false,
-          "apiResponseRenderingTemplateFile": "responseRenderingTemplate.json",
-          "parameters": [
-            {
-              "name": "prompt",
-              "title": "Question",
-              "description": "Your question about engineering design presentations",
-              "inputType": "text"
-            }
-          ]
-        }
-      ]
-    }
-  ],
-  "permissions": ["identity", "messageTeamMembers"],
-  "validDomains": ["ai-gateway-apim-poc-my.azure-api.net"]
+﻿{
+    "$schema":  "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json",
+    "manifestVersion":  "devPreview",
+    "version":  "1.0.4",
+    "id":  "2f3f3c91-1f4f-4c0f-b40c-1b6f6f1b1222",
+    "name":  {
+                 "short":  "Eng Design PPT Agent",
+                 "full":  "Engineering Design PPT Agent via APIM"
+             },
+    "developer":  {
+                      "name":  "Michael Yaacoub at Microsoft",
+                      "websiteUrl":  "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs/support.md",
+                      "privacyUrl":  "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs/privacy-policy.md",
+                      "termsOfUseUrl":  "https://github.com/csdmichael/FoundryPrivateVNET-APIM-Gateway/blob/main/docs/terms-of-use.md"
+                  },
+    "description":  {
+                        "short":  "Foundry agent package for engineering design presentations.",
+                        "full":  "Teams package for the Engineering Design PPT agent routed through Azure API Management."
+                    },
+    "icons":  {
+                  "outline":  "outline.png",
+                  "color":  "color.png"
+              },
+    "accentColor":  "#0F6CBD",
+    "bots":  [
+                 {
+                     "botId":  "fdacafcf-352a-4443-8805-402f5780ae67",
+                     "supportsSessions":  true,
+                     "scopes":  [
+                                    "personal",
+                                    "team",
+                                    "groupChat",
+                                    "copilot"
+                                ],
+                     "commandLists":  [
+                                          {
+                                              "scopes":  [
+                                                             "personal",
+                                                             "copilot"
+                                                         ],
+                                              "commands":  [
+                                                               {
+                                                                   "description":  "Ask a question about engineering design presentations",
+                                                                   "title":  "Ask"
+                                                               },
+                                                               {
+                                                                   "title":  "In engineering_design_review_...",
+                                                                   "description":  "In engineering_design_review_001",
+                                                                   "prompt":  "In engineering_design_review_001.pptx, summarize the problem statement, project goal, and design scope described in the opening slides.",
+                                                                   "type":  "prompt"
+                                                               },
+                                                               {
+                                                                   "title":  "What system components, layers,",
+                                                                   "description":  "What system components, layers, or services are shown in solution_architecture_update_002",
+                                                                   "prompt":  "What system components, layers, or services are shown in solution_architecture_update_002.pptx?",
+                                                                   "type":  "prompt"
+                                                               },
+                                                               {
+                                                                   "title":  "Which interfaces, data flows,",
+                                                                   "description":  "Which interfaces, data flows, or external integrations are called out between components in the architecture update deck",
+                                                                   "prompt":  "Which interfaces, data flows, or external integrations are called out between components in the architecture update deck?",
+                                                                   "type":  "prompt"
+                                                               },
+                                                               {
+                                                                   "title":  "What alternative design options",
+                                                                   "description":  "What alternative design options or solution approaches are compared in engineering_design_review_001",
+                                                                   "prompt":  "What alternative design options or solution approaches are compared in engineering_design_review_001.pptx?",
+                                                                   "type":  "prompt"
+                                                               },
+                                                               {
+                                                                   "title":  "What trade-offs or decision",
+                                                                   "description":  "What trade-offs or decision criteria are used to justify the preferred design in the engineering presentations",
+                                                                   "prompt":  "What trade-offs or decision criteria are used to justify the preferred design in the engineering presentations?",
+                                                                   "type":  "prompt"
+                                                               }
+                                                           ]
+                                          }
+                                      ]
+                 }
+             ],
+    "copilotAgents":  {
+                          "customEngineAgents":  [
+                                                     {
+                                                         "id":  "fdacafcf-352a-4443-8805-402f5780ae67",
+                                                         "type":  "bot",
+                                                         "disclaimer":  {
+                                                                            "text":  "Answers are grounded in the configured engineering presentation documents and may reflect deployment-time search data."
+                                                                        }
+                                                     }
+                                                 ]
+                      },
+    "composeExtensions":  [
+                              {
+                                  "composeExtensionType":  "apiBased",
+                                  "apiSpecificationFile":  "apiSpecificationFile.json",
+                                  "commands":  [
+                                                   {
+                                                       "id":  "chatWithAgent",
+                                                       "type":  "query",
+                                                       "title":  "Ask Eng Design PPT",
+                                                       "description":  "Ask a question about engineering design presentations",
+                                                       "samplePrompts":  [
+                                                                             {
+                                                                                 "text":  "In engineering_design_review_001.pptx, summarize the problem statement, project goal, and design scope described in the opening slides."
+                                                                             },
+                                                                             {
+                                                                                 "text":  "What system components, layers, or services are shown in solution_architecture_update_002.pptx?"
+                                                                             },
+                                                                             {
+                                                                                 "text":  "Which interfaces, data flows, or external integrations are called out between components in the architecture update deck?"
+                                                                             },
+                                                                             {
+                                                                                 "text":  "What alternative design options or solution approaches are compared in engineering_design_review_001.pptx?"
+                                                                             },
+                                                                             {
+                                                                                 "text":  "What trade-offs or decision criteria are used to justify the preferred design in the engineering presentations?"
+                                                                             }
+                                                                         ],
+                                                       "initialRun":  false,
+                                                       "apiResponseRenderingTemplateFile":  "responseRenderingTemplate.json",
+                                                       "parameters":  [
+                                                                          {
+                                                                              "name":  "prompt",
+                                                                              "title":  "Question",
+                                                                              "description":  "Your question about engineering design presentations",
+                                                                              "inputType":  "text"
+                                                                          }
+                                                                      ]
+                                                   }
+                                               ]
+                              }
+                          ],
+    "permissions":  [
+                        "identity",
+                        "messageTeamMembers"
+                    ],
+    "validDomains":  [
+                         "ai-gateway-apim-poc-my.azure-api.net"
+                     ]
 }
