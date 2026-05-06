@@ -277,31 +277,28 @@ Install the [Teams Toolkit](https://marketplace.visualstudio.com/items?itemName=
 
 ## Bot Registration
 
-The Teams chat experience requires an Azure Bot Service registration backed by a Function App:
+The Teams chat experience now uses one Azure Bot Service registration per use case, each backed by its own Function App:
 
-| Resource | Value |
-|----------|-------|
-| Bot name | `foundry-privatevnet-bot` |
-| App ID | `37a8fd15-4b3c-4289-9e8c-19b65120b844` |
-| App type | SingleTenant |
-| Messaging endpoint | `https://func-fdryvnetgw-bot-eastus.azurewebsites.net/api/messages` |
-| Function App | `func-fdryvnetgw-bot-eastus` (Linux consumption, Python 3.11) |
-| Channel | Microsoft Teams |
+| Use case | Bot name | App ID | Messaging endpoint | Function App |
+|----------|----------|--------|--------------------|--------------|
+| Tax PDF Forms | `foundry-privatevnet-tax-bot` | `9590abf6-d0df-477b-b16c-1298dfbed5cc` | `https://func-fdryvnetgw-tax-bot-eastus.azurewebsites.net/api/messages` | `func-fdryvnetgw-tax-bot-eastus` |
+| Eng Design PPT | `foundry-privatevnet-eng-bot` | `fdacafcf-352a-4443-8805-402f5780ae67` | `https://func-fdryvnetgw-eng-bot-eastus.azurewebsites.net/api/messages` | `func-fdryvnetgw-eng-bot-eastus` |
 
-The bot function receives messages from Teams, extracts the user text, calls the APIM `/chat` endpoint, and replies with the response. The function code is in [bot-function/](bot-function/).
+Each bot function receives messages from Teams, sets its use-case-specific routing, calls the APIM `/chat` endpoint, and replies with the response. The function code is in [bot-function/](bot-function/).
 
 All bot infrastructure (Function App, storage account, consumption plan, bot registration, Teams channel) is managed by Terraform and deployed automatically.
 
-### Bot app secret
+### Bot app secrets
 
-The bot app password is stored as a Terraform variable `bot_app_password`. Set it via environment variable:
+The bot app passwords are stored as Terraform variables. Set them via environment variables:
 
 ```powershell
-$env:TF_VAR_bot_app_password = "your-secret-here"
+$env:TF_VAR_tax_bot_app_password = "your-tax-secret-here"
+$env:TF_VAR_eng_bot_app_password = "your-eng-secret-here"
 terraform apply -var-file=main.tfvars.json
 ```
 
-Or add `BOT_APP_PASSWORD` as a GitHub Actions secret and pass it in the workflow.
+Or add `TAX_BOT_APP_PASSWORD` and `ENG_BOT_APP_PASSWORD` as GitHub Actions secrets and pass them in the workflow.
 
 ## APIM Configuration
 

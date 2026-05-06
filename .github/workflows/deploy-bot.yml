@@ -12,6 +12,11 @@ on:
 jobs:
   deploy-bot-function:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - app_name: func-fdryvnetgw-tax-bot-eastus
+          - app_name: func-fdryvnetgw-eng-bot-eastus
     permissions:
       id-token: write
       contents: read
@@ -25,7 +30,7 @@ jobs:
       - name: Deploy bot function
         uses: azure/webapps-deploy@v3
         with:
-          app-name: func-fdryvnetgw-bot-eastus
+          app-name: ${{ matrix.app_name }}
           package: bot-function
           scm-do-build-during-deployment: true
       - name: Verify bot health endpoint
@@ -35,7 +40,7 @@ jobs:
           delay=30
           sleep 30
           for attempt in $(seq 1 $max_attempts); do
-            if curl --fail --silent --show-error https://func-fdryvnetgw-bot-eastus.azurewebsites.net/api/health; then
+            if curl --fail --silent --show-error https://${{ matrix.app_name }}.azurewebsites.net/api/health; then
               echo "Health check passed"
               break
             fi

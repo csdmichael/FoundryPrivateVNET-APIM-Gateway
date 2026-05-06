@@ -98,16 +98,27 @@ variable "tags" {
   }
 }
 
-variable "bot_app_id" {
+variable "tax_bot_app_id" {
   type        = string
-  description = "Entra app registration ID for the Teams bot"
-  default     = "37a8fd15-4b3c-4289-9e8c-19b65120b844"
+  description = "Entra app registration ID for the Tax PDF Forms Teams bot"
 }
 
-variable "bot_app_password" {
+variable "tax_bot_app_password" {
   type        = string
   sensitive   = true
-  description = "Entra app secret for the Teams bot"
+  description = "Entra app secret for the Tax PDF Forms Teams bot"
+  default     = ""
+}
+
+variable "eng_bot_app_id" {
+  type        = string
+  description = "Entra app registration ID for the Engineering Design PPT Teams bot"
+}
+
+variable "eng_bot_app_password" {
+  type        = string
+  sensitive   = true
+  description = "Entra app secret for the Engineering Design PPT Teams bot"
   default     = ""
 }
 
@@ -162,6 +173,22 @@ locals {
   web_app_location = local.deploy_web_apps ? (local.use_existing_app_service_plan ? data.azurerm_service_plan.existing[0].location : var.location) : null
   api_web_app_name = var.api_web_app_name != null ? var.api_web_app_name : azurecaf_name.api_web_app.result
   ui_web_app_name = var.ui_web_app_name != null ? var.ui_web_app_name : azurecaf_name.ui_web_app.result
+  bot_use_cases = {
+    tax_pdf_forms = {
+      app_id            = var.tax_bot_app_id
+      app_password      = var.tax_bot_app_password
+      registration_name = "foundry-privatevnet-tax-bot"
+      display_name      = "Foundry Tax PDF Forms Bot"
+      app_name          = "func-${var.name_prefix}-tax-bot-${local.location_slug}"
+    }
+    eng_design_ppt = {
+      app_id            = var.eng_bot_app_id
+      app_password      = var.eng_bot_app_password
+      registration_name = "foundry-privatevnet-eng-bot"
+      display_name      = "Foundry Engineering Design PPT Bot"
+      app_name          = "func-${var.name_prefix}-eng-bot-${local.location_slug}"
+    }
+  }
 }
 
 resource "azurecaf_name" "app_service_plan" {
@@ -491,7 +518,8 @@ resource "azurerm_monitor_diagnostic_setting" "ui" {
 # =============================================================================
 
 resource "azurerm_linux_web_app" "bot" {
-  name                = "func-${var.name_prefix}-bot-${local.location_slug}"
+  for_each            = local.bot_use_cases
+  name                = each.value.app_name
   resource_group_name = data.azurerm_resource_group.target.name
   location            = data.azurerm_service_plan.bot.location
   service_plan_id     = data.azurerm_service_plan.bot.id
@@ -505,18 +533,20 @@ resource "azurerm_linux_web_app" "bot" {
   }
 
   app_settings = {
-    "MicrosoftAppId"              = var.bot_app_id
-    "MicrosoftAppPassword"        = var.bot_app_password
+    "MicrosoftAppId"              = each.value.app_id
+    "MicrosoftAppPassword"        = each.value.app_password
     "MicrosoftAppType"            = "SingleTenant"
     "MicrosoftAppTenantId"        = data.azurerm_client_config.current.tenant_id
     "APIM_CHAT_URL"               = "${data.azurerm_api_management.apim.gateway_url}/foundry-privatevnet-app/chat"
+    "USE_CASE"                    = each.key
     "SCM_DO_BUILD_DURING_DEPLOYMENT" = "true"
   }
 }
 
 resource "azapi_resource" "bot_registration" {
+  for_each  = local.bot_use_cases
   type      = "Microsoft.BotService/botServices@2022-09-15"
-  name      = "foundry-privatevnet-bot"
+  name      = each.value.registration_name
   location  = "global"
   parent_id = data.azurerm_resource_group.target.id
   tags      = var.tags
@@ -527,9 +557,9 @@ resource "azapi_resource" "bot_registration" {
     }
     kind = "azurebot"
     properties = {
-      displayName                         = "Foundry Private VNET Bot"
-      endpoint                            = "https://${azurerm_linux_web_app.bot.default_hostname}/api/messages"
-      msaAppId                            = var.bot_app_id
+      displayName                         = each.value.display_name
+      endpoint                            = "https://${azurerm_linux_web_app.bot[each.key].default_hostname}/api/messages"
+      msaAppId                            = each.value.app_id
       msaAppType                          = "SingleTenant"
       msaAppTenantId                      = data.azurerm_client_config.current.tenant_id
     }
@@ -537,9 +567,11 @@ resource "azapi_resource" "bot_registration" {
 }
 
 resource "azapi_resource" "bot_teams_channel" {
+  for_each  = local.bot_use_cases
   type      = "Microsoft.BotService/botServices/channels@2022-09-15"
   name      = "MsTeamsChannel"
-  parent_id = azapi_resource.bot_registration.id
+  location  = "global"
+  parent_id = azapi_resource.bot_registration[each.key].id
 
   body = {
     properties = {

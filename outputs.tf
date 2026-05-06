@@ -34,14 +34,21 @@ output "search_private_endpoint_ip" {
   value = one(azurerm_private_endpoint.search.private_service_connection).private_ip_address
 }
 
-output "bot_function_app_name" {
-  value = azurerm_linux_web_app.bot.name
+output "bot_function_app_names" {
+  value = {
+    for use_case, app in azurerm_linux_web_app.bot : use_case => app.name
+  }
 }
 
-output "bot_function_url" {
-  value = "https://${azurerm_linux_web_app.bot.default_hostname}/api/messages"
+output "bot_function_urls" {
+  value = {
+    for use_case, app in azurerm_linux_web_app.bot : use_case => "https://${app.default_hostname}/api/messages"
+  }
 }
 
-output "bot_app_id" {
-  value = var.bot_app_id
+output "bot_app_ids" {
+  value = {
+    tax_pdf_forms = var.tax_bot_app_id
+    eng_design_ppt = var.eng_bot_app_id
+  }
 }
