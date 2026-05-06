@@ -9,6 +9,16 @@ Set-Location $PSScriptRoot\..
 
 $pythonCommand = if ($env:PYTHON_BIN) { $env:PYTHON_BIN } else { 'python' }
 
+function Assert-LastExitCode {
+    param(
+        [string]$Operation
+    )
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Operation failed with exit code $LASTEXITCODE."
+    }
+}
+
 if (-not $SearchOnly -and -not $AgentsOnly) {
     $SearchOnly = $true
     $AgentsOnly = $true
@@ -23,6 +33,7 @@ $sourceCreateSearchScriptPath = [System.IO.Path]::Combine($sourceConfigDir, 'scr
 $sourceCreateAgentScriptPath = [System.IO.Path]::Combine($sourceConfigDir, 'scripts', 'create_agent.py')
 
 git clone --depth 1 $SourceRepo $sourceConfigDir | Out-Null
+Assert-LastExitCode "Cloning source repo"
 
 $sourceAzureResources = Get-Content $sourceAzureResourcesPath | ConvertFrom-Json
 $sourceAzureResources.subscription_id = $config.subscription_id
@@ -72,11 +83,36 @@ $sourceCreateAgentScript = $sourceCreateAgentScript.Replace(
 )
 $sourceCreateAgentScript = $sourceCreateAgentScript.Replace(
     'project_client = AgentsClient(endpoint=PROJECT_ENDPOINT, credential=credential)',
-    'project_client = AIProjectClient(endpoint=PROJECT_ENDPOINT, credential=credential).agents'
+    'project_client = AIProjectClient(endpoint=PROJECT_ENDPOINT, credential=credential)'
+)
+$sourceCreateAgentScript = $sourceCreateAgentScript.Replace(
+    'project_client.list_agents()',
+    'project_client.agents.list()'
+)
+$sourceCreateAgentScript = $sourceCreateAgentScript.Replace(
+    'project_client.delete_agent(',
+    'project_client.agents.delete('
+)
+$sourceCreateAgentScript = $sourceCreateAgentScript.Replace(
+    'project_client.create_agent(',
+    'project_client.agents.create('
+)
+$sourceCreateAgentScript = $sourceCreateAgentScript.Replace(
+    'project_client.threads.',
+    'project_client.agents.threads.'
+)
+$sourceCreateAgentScript = $sourceCreateAgentScript.Replace(
+    'project_client.messages.',
+    'project_client.agents.messages.'
+)
+$sourceCreateAgentScript = $sourceCreateAgentScript.Replace(
+    'project_client.runs.',
+    'project_client.agents.runs.'
 )
 [System.IO.File]::WriteAllText($sourceCreateAgentScriptPath, $sourceCreateAgentScript, $utf8NoBom)
 
 $searchAdminKey = az search admin-key show --service-name $config.search.target_service_name --resource-group $config.resource_group --query primaryKey -o tsv
+Assert-LastExitCode "Retrieving Search admin key"
 if (-not $searchAdminKey) {
     throw "Unable to retrieve Search admin key for $($config.search.target_service_name)."
 }
@@ -93,11 +129,13 @@ try {
 
         if ($SearchOnly) {
             & $pythonCommand $sourceCreateSearchScriptPath
+            Assert-LastExitCode "Creating Search assets for use case '$useCase'"
         }
 
         if ($AgentsOnly) {
             $env:AZURE_AI_SEARCH_CONNECTION_NAME = $config.foundry.search_connection_name
             & $pythonCommand $sourceCreateAgentScriptPath
+            Assert-LastExitCode "Creating Foundry agent for use case '$useCase'"
         }
     }
 }

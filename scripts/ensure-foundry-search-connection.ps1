@@ -1,6 +1,16 @@
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot\..
 
+function Assert-LastExitCode {
+    param(
+        [string]$Operation
+    )
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Operation failed with exit code $LASTEXITCODE."
+    }
+}
+
 $config = Get-Content .\config\azure_resources.json | ConvertFrom-Json
 $subscriptionId = $config.subscription_id
 $resourceGroup = $config.resource_group
@@ -15,6 +25,7 @@ $searchDisplayName = $config.search.target_service_name
 $connectionUrl = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.CognitiveServices/accounts/$accountName/projects/$projectName/connections/$connectionName?api-version=2025-06-01"
 
 $searchKey = az search admin-key show --resource-group $resourceGroup --service-name $searchDisplayName --query primaryKey -o tsv
+Assert-LastExitCode "Retrieving Search admin key"
 if (-not $searchKey) {
     throw "Unable to read admin key for $searchDisplayName"
 }
@@ -45,4 +56,5 @@ $payloadPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-search-conne
 $payload | ConvertTo-Json -Depth 20 | Set-Content -Path $payloadPath -Encoding UTF8
 
 az rest --method put --headers Content-Type=application/json --url $connectionUrl --body "@$payloadPath" | Out-Null
+Assert-LastExitCode "Ensuring Foundry Search connection '$connectionName'"
 Write-Host "Ensured Foundry Search connection: $connectionName"
