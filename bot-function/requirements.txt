@@ -1,3 +1,4 @@
-botbuilder==4.16.2
+botbuilder-core==4.16.2
+botbuilder-schema==4.16.2
 aiohttp==3.10.11
-azure-functions==1.21.3
+gunicorn==23.0.0

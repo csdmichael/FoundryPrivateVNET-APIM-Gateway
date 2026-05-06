@@ -111,6 +111,12 @@ variable "bot_app_password" {
   default     = ""
 }
 
+variable "bot_service_plan_name" {
+  type        = string
+  description = "Existing App Service Plan to host the bot web app"
+  default     = "plan-taxforms"
+}
+
 data "azurerm_resource_group" "target" {
   name = var.resource_group_name
 }
@@ -135,6 +141,11 @@ data "azurerm_cognitive_account" "foundry" {
 data "azurerm_service_plan" "existing" {
   count               = (var.deploy_api || var.deploy_ui) && var.existing_app_service_plan_name != null ? 1 : 0
   name                = var.existing_app_service_plan_name
+  resource_group_name = data.azurerm_resource_group.target.name
+}
+
+data "azurerm_service_plan" "bot" {
+  name                = var.bot_service_plan_name
   resource_group_name = data.azurerm_resource_group.target.name
 }
 
@@ -479,49 +490,29 @@ resource "azurerm_monitor_diagnostic_setting" "ui" {
 }
 
 # =============================================================================
-# Bot Function App — receives Teams messages and proxies to APIM /chat
+# Bot Web App — receives Teams messages and proxies to APIM /chat
 # =============================================================================
 
-resource "azurerm_storage_account" "bot" {
-  name                     = "st${replace(var.name_prefix, "-", "")}bot"
-  resource_group_name      = data.azurerm_resource_group.target.name
-  location                 = var.location
-  account_tier             = "Standard"
-  account_replication_type = "LRS"
-  tags                     = var.tags
-}
-
-resource "azurerm_service_plan" "bot" {
-  name                = "plan-${var.name_prefix}-bot-${local.location_slug}"
+resource "azurerm_linux_web_app" "bot" {
+  name                = "func-${var.name_prefix}-bot-${local.location_slug}"
   resource_group_name = data.azurerm_resource_group.target.name
-  location            = var.location
-  os_type             = "Linux"
-  sku_name            = "Y1"
+  location            = data.azurerm_service_plan.bot.location
+  service_plan_id     = data.azurerm_service_plan.bot.id
   tags                = var.tags
-}
-
-resource "azurerm_linux_function_app" "bot" {
-  name                       = "func-${var.name_prefix}-bot-${local.location_slug}"
-  resource_group_name        = data.azurerm_resource_group.target.name
-  location                   = var.location
-  storage_account_name       = azurerm_storage_account.bot.name
-  storage_account_access_key = azurerm_storage_account.bot.primary_access_key
-  service_plan_id            = azurerm_service_plan.bot.id
-  tags                       = var.tags
 
   site_config {
     application_stack {
       python_version = "3.11"
     }
+    app_command_line = "gunicorn --bind=0.0.0.0 --timeout 600 -k aiohttp.GunicornWebWorker bot_app:app"
   }
 
   app_settings = {
-    "FUNCTIONS_WORKER_RUNTIME" = "python"
-    "MicrosoftAppId"           = var.bot_app_id
-    "MicrosoftAppPassword"     = var.bot_app_password
-    "MicrosoftAppType"         = "SingleTenant"
-    "MicrosoftAppTenantId"     = data.azurerm_client_config.current.tenant_id
-    "APIM_CHAT_URL"            = "https://${data.azurerm_api_management.apim.gateway_url}/foundry-privatevnet-app/chat"
+    "MicrosoftAppId"        = var.bot_app_id
+    "MicrosoftAppPassword"  = var.bot_app_password
+    "MicrosoftAppType"      = "SingleTenant"
+    "MicrosoftAppTenantId"  = data.azurerm_client_config.current.tenant_id
+    "APIM_CHAT_URL"         = "https://${data.azurerm_api_management.apim.gateway_url}/foundry-privatevnet-app/chat"
   }
 }
 
@@ -539,7 +530,7 @@ resource "azapi_resource" "bot_registration" {
     kind = "azurebot"
     properties = {
       displayName                         = "Foundry Private VNET Bot"
-      endpoint                            = "https://${azurerm_linux_function_app.bot.default_hostname}/api/messages"
+      endpoint                            = "https://${azurerm_linux_web_app.bot.default_hostname}/api/messages"
       msaAppId                            = var.bot_app_id
       msaAppType                          = "SingleTenant"
       msaAppTenantId                      = data.azurerm_client_config.current.tenant_id

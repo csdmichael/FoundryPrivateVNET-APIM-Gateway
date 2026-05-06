@@ -35,11 +35,11 @@ output "search_private_endpoint_ip" {
 }
 
 output "bot_function_app_name" {
-  value = azurerm_linux_function_app.bot.name
+  value = azurerm_linux_web_app.bot.name
 }
 
 output "bot_function_url" {
-  value = "https://${azurerm_linux_function_app.bot.default_hostname}/api/messages"
+  value = "https://${azurerm_linux_web_app.bot.default_hostname}/api/messages"
 }
 
 output "bot_app_id" {
