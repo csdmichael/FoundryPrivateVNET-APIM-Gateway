@@ -31,6 +31,7 @@ jobs:
     env:
       TF_VAR_deploy_api: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_api || false }}
       TF_VAR_deploy_ui: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_ui || false }}
+      TF_VAR_bot_app_password: ${{ secrets.BOT_APP_PASSWORD }}
     permissions:
       id-token: write
       contents: read
