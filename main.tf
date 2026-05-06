@@ -505,11 +505,12 @@ resource "azurerm_linux_web_app" "bot" {
   }
 
   app_settings = {
-    "MicrosoftAppId"        = var.bot_app_id
-    "MicrosoftAppPassword"  = var.bot_app_password
-    "MicrosoftAppType"      = "SingleTenant"
-    "MicrosoftAppTenantId"  = data.azurerm_client_config.current.tenant_id
-    "APIM_CHAT_URL"         = "${data.azurerm_api_management.apim.gateway_url}/foundry-privatevnet-app/chat"
+    "MicrosoftAppId"              = var.bot_app_id
+    "MicrosoftAppPassword"        = var.bot_app_password
+    "MicrosoftAppType"            = "SingleTenant"
+    "MicrosoftAppTenantId"        = data.azurerm_client_config.current.tenant_id
+    "APIM_CHAT_URL"               = "${data.azurerm_api_management.apim.gateway_url}/foundry-privatevnet-app/chat"
+    "SCM_DO_BUILD_DURING_DEPLOYMENT" = "true"
   }
 }
 
