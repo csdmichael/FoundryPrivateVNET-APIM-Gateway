@@ -15,7 +15,7 @@ if (-not $SearchOnly -and -not $AgentsOnly) {
 }
 
 $config = Get-Content .\config\azure_resources.json | ConvertFrom-Json
-$sourceConfigDir = Join-Path $env:TEMP ("ai-search-blob-storage-" + [guid]::NewGuid().ToString('N'))
+$sourceConfigDir = Join-Path ([System.IO.Path]::GetTempPath()) ("ai-search-blob-storage-" + [guid]::NewGuid().ToString('N'))
 
 git clone --depth 1 $SourceRepo $sourceConfigDir | Out-Null
 

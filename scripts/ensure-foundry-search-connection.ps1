@@ -41,7 +41,7 @@ $payload = @{
     }
 }
 
-$payloadPath = Join-Path $env:TEMP 'foundry-search-connection.json'
+$payloadPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-search-connection.json'
 $payload | ConvertTo-Json -Depth 20 | Set-Content -Path $payloadPath -Encoding UTF8
 
 az rest --method put --headers Content-Type=application/json --url $connectionUrl --body "@$payloadPath" | Out-Null

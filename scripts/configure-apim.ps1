@@ -35,7 +35,7 @@ $policyXml = @"
 </policies>
 "@
 
-$policyBodyPath = Join-Path $env:TEMP 'apim-policy-body.json'
+$policyBodyPath = Join-Path ([System.IO.Path]::GetTempPath()) 'apim-policy-body.json'
 @{properties=@{format="xml"; value=$policyXml}} | ConvertTo-Json -Depth 5 | Set-Content -Path $policyBodyPath -Encoding UTF8
 $ErrorActionPreference = 'Continue'
 az rest --method PUT --url "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.ApiManagement/service/$apimName/apis/$apiId/policies/policy?api-version=2024-05-01" --body "@$policyBodyPath" 2>$null | Out-Null

@@ -79,7 +79,7 @@ $policyXml = @"
 </policies>
 "@
 
-$policyPath = Join-Path $env:TEMP 'foundry-openai-gateway-policy.xml'
+$policyPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-openai-gateway-policy.xml'
 $policyXml | Set-Content -Path $policyPath -Encoding UTF8
 az apim api policy update --resource-group $resourceGroup --service-name $apimName --api-id $apimApiId --xml-file $policyPath -o none
 
@@ -97,7 +97,7 @@ $connectionPayload = @{
     }
 }
 
-$payloadPath = Join-Path $env:TEMP 'foundry-apim-gateway-connection.json'
+$payloadPath = Join-Path ([System.IO.Path]::GetTempPath()) 'foundry-apim-gateway-connection.json'
 $connectionPayload | ConvertTo-Json -Depth 10 | Set-Content -Path $payloadPath -Encoding UTF8
 az rest --method put --headers Content-Type=application/json --url $connectionUrl --body "@$payloadPath" | Out-Null
 
