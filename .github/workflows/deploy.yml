@@ -97,7 +97,21 @@ jobs:
       - name: Verify bot health endpoint
         shell: bash
         run: |
-          curl --fail --silent --show-error https://func-fdryvnetgw-bot-eastus.azurewebsites.net/api/health
+          max_attempts=5
+          delay=15
+          for attempt in $(seq 1 $max_attempts); do
+            if curl --fail --silent --show-error https://func-fdryvnetgw-bot-eastus.azurewebsites.net/api/health; then
+              echo "Health check passed"
+              break
+            fi
+            if [ $attempt -lt $max_attempts ]; then
+              echo "Health check failed (attempt $attempt/$max_attempts), retrying in ${delay}s..."
+              sleep $delay
+            else
+              echo "Health check failed after $max_attempts attempts"
+              exit 1
+            fi
+          done
 
   build-and-deploy-api:
     needs: terraform

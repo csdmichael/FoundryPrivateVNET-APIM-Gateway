@@ -13,13 +13,40 @@ The main design goal is to place APIM in front of Foundry so gateway concerns ar
 
 ![Architecture](docs/architecture.png)
 
-## Live URLs
+## Configuration
 
-| Service | URL |
-|---------|-----|
-| APIM Gateway | https://ai-gateway-apim-poc-my.azure-api.net |
-| APIM Chat Endpoint | https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/chat |
-| Foundry OpenAI Gateway | https://ai-gateway-apim-poc-my.azure-api.net/002-ai-poc-private/openai |
+All runtime configuration lives in the `config/` folder. These JSON files are loaded by `config/__init__.py` and shared across deployment scripts, provisioning scripts, and the API layer.
+
+| File | Purpose |
+|------|---------|
+| `agent_config.json` | Foundry agent definitions — one entry per use case with `name`, `model_deployment`, and `instructions` |
+| `azure_resources.json` | Central map of all Azure resource IDs, endpoints, and per-use-case paths (APIM, Foundry, Search, Cosmos DB, App Services) |
+| `document_config.json` | Sample document metadata (filename, doc_id, title) used to seed and validate each use-case Search index |
+| `prompts_config.json` | Sample prompts grouped by query type (`keyword`, `semantic`, `agent`) for smoke-testing each agent |
+| `search_config.json` | Azure AI Search index and indexer names for each use case, used by the clone and provisioning scripts |
+| `storage_config.json` | Storage notes for the solution — document that this solution uses Cosmos DB-backed content rather than blob containers |
+| `__init__.py` | Python module that loads and caches each JSON file; exposes typed accessors (`azure_resources()`, `agent_config()`, `prompts_config()`, `document_config()`, `search_config()`, `storage_config()`) used throughout the codebase |
+
+### azure_resources.json
+
+This is the primary config file. It contains:
+
+- `subscription_id`, `resource_group`, `location` — target Azure environment
+- `apim` — APIM service resource ID, gateway URL, API path, product name, and API names (app backend and Foundry gateway)
+- `foundry` — Foundry account name, resource ID, project endpoint, source project endpoint, and Search connection name
+- `search` — target and source Search service names, resource IDs, and endpoint
+- `cosmosdb` — Cosmos DB account name, endpoint, resource ID, database, and container
+- `app_services` — optional API and UI App Service names and URLs (only used when `deploy_api`/`deploy_ui` are enabled)
+- `use_cases` — per-use-case label, agent name, APIM agent path, and Search asset names
+
+### agent_config.json
+
+Defines the two Foundry agents provisioned into the private Foundry project:
+
+- `Tax-PDF-Forms-Agent` — uses `gpt-4.1`, grounded on the tax PDF Search index
+- `Eng-Design-PPT-Agent` — uses `gpt-4.1`, grounded on the engineering design PPT Search index
+
+> **Note:** All APIM and Foundry endpoints in `azure_resources.json` are deployed inside a private Azure VNet. They are not reachable from the public internet. Replace the values in `azure_resources.json` with your own resource details before deploying to a different environment.
 
 ## Solution Overview
 
@@ -128,9 +155,8 @@ Recommended operator flow:
 
 1. Push to `main` or run the `deploy` workflow manually from GitHub Actions.
 2. Let the `terraform`, `deploy-bot-function`, and `post-deploy` jobs finish.
-3. Validate the APIM chat endpoint `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/chat`.
-4. Validate the Foundry OpenAI APIM path `https://ai-gateway-apim-poc-my.azure-api.net/002-ai-poc-private/openai`.
-5. Import the Teams agent packages and test in Teams.
+3. Validate the APIM chat and Foundry OpenAI gateway paths from within the private VNet (these endpoints are not publicly reachable).
+4. Import the Teams agent packages and test in Teams.
 
 Notes:
 
@@ -145,11 +171,15 @@ Notes:
 
 ## APIM Configuration
 
+> **Note:** All APIM paths below are deployed inside a private Azure VNet and are not reachable from the public internet. They are accessible only from resources connected to the same VNet or via VNet peering/VPN.
+
 The deployment configures three APIM surfaces:
 
-- **App backend API** at `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app` — imported from the OpenAPI spec, subscription-free
-- **Foundry OpenAI gateway** at `https://ai-gateway-apim-poc-my.azure-api.net/002-ai-poc-private/openai` — proxies to the Foundry account with managed identity
-- **Teams chat endpoint** at `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/chat` — APIM operation-level policy transforms flat `{prompt}` into OpenAI chat completions
+- **App backend API** at `{apim_gateway_url}/foundry-privatevnet-app` — imported from the OpenAPI spec, subscription-free
+- **Foundry OpenAI gateway** at `{apim_gateway_url}/002-ai-poc-private/openai` — proxies to the Foundry account with managed identity
+- **Teams chat endpoint** at `{apim_gateway_url}/foundry-privatevnet-app/chat` — APIM operation-level policy transforms flat `{prompt}` into OpenAI chat completions
+
+Replace `{apim_gateway_url}` with the value of `apim.gateway_url` from `config/azure_resources.json`.
 
 ```powershell
 ./scripts/configure-apim.ps1
@@ -364,14 +394,17 @@ Important network prerequisite:
 
 Use this sequence for a live walkthrough after the GitHub Actions deployment completes:
 
-1. Test the APIM chat endpoint with a sample prompt:
+> **Note:** The APIM gateway is deployed inside a private Azure VNet. Steps 1 and 2 below require network access to the VNet (e.g., from an Azure VM, Bastion, or VPN-connected machine).
+
+1. Test the APIM chat endpoint with a sample prompt (requires private VNet access):
 
 ```powershell
+$apimBase = (Get-Content config/azure_resources.json | ConvertFrom-Json).apim.gateway_url
 $body = @{prompt="What does the Maine nonprofit certificate say about filing requirements?"} | ConvertTo-Json
-Invoke-RestMethod -Method Post -Uri "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/chat" -ContentType "application/json" -Body $body
+Invoke-RestMethod -Method Post -Uri "$apimBase/foundry-privatevnet-app/chat" -ContentType "application/json" -Body $body
 ```
 
-2. Open the Foundry OpenAI gateway at `https://ai-gateway-apim-poc-my.azure-api.net/002-ai-poc-private/openai`.
+2. Browse the Foundry OpenAI gateway path via the APIM gateway URL in `config/azure_resources.json` (requires private VNet access).
 3. Import the Teams agent packages and preview in Teams.
 4. Run the packaged smoke tests:
 
@@ -441,10 +474,10 @@ Both agents use only `azure_ai_search` as their grounding tool — no web search
 
 ### Running tests
 
-Run the automated smoke tests via APIM:
+Run the automated smoke tests via APIM (requires private VNet access or a VPN-connected machine). The `APP_API_BASE_URL` is read from `config/azure_resources.json` automatically, but you can override it:
 
 ```powershell
-$env:APP_API_BASE_URL = "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api"
+$env:APP_API_BASE_URL = (Get-Content config/azure_resources.json | ConvertFrom-Json).apim.gateway_url + "/foundry-privatevnet-app/api"
 ./scripts/test-sample-prompts.ps1
 ```
 
