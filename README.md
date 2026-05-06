@@ -468,11 +468,11 @@ Current workflow split:
 
 - `deploy-infra.yml` for Terraform and resource import changes
 - `deploy-bot.yml` for the bot function app
-- `deploy-api.yml` for the API app plus its opt-in App Service infrastructure
-- `deploy-ui.yml` for the UI app plus its opt-in App Service infrastructure
 - `configure-platform.yml` for APIM and Foundry AI gateway configuration
 - `provision-search-agents.yml` for Search asset and Foundry agent provisioning
 - `package-teams-agents.yml` for Teams package zips
+
+The API and UI deployment workflows are currently disabled.
 
 Pushes to `main` trigger only the workflows whose path filters match the changed component. Changes limited to `README.md` or files under `docs/` do not trigger any deployment workflow.
 
@@ -486,7 +486,7 @@ Recommended operator flow:
 Notes:
 
 - The workflows still use a single Terraform configuration and a branch-scoped OIDC credential for `main`.
-- API and UI workflows set `TF_VAR_deploy_api` or `TF_VAR_deploy_ui` before applying Terraform so those App Service resources stay opt-in.
+- API and UI GitHub Actions deployments are currently disabled, so App Service changes for those components are not deployed through the active workflow set.
 - Docs-only updates are ignored by deployment workflows.
 - Post-deploy provisioning clones `https://github.com/csdmichael/AI-Search-Blob-Storage` at runtime and overlays this repo's private Foundry, Search, and Cosmos resource settings.
 - The private Foundry project uses the `aisearchpocmyaacoub` Azure AI Search connection created by `scripts/ensure-foundry-search-connection.ps1`.
