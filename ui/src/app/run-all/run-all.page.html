@@ -6,6 +6,16 @@
       Each step proceeds even if the previous one fails, so you get a full diagnostic report.
     </p>
 
+    <!-- Data pipeline diagram -->
+    <div class="pipeline-diagram" (click)="diagramExpanded = !diagramExpanded">
+      <img src="assets/DataPipelineSequence.png" alt="Data Pipeline Sequence Diagram"
+           [class.collapsed]="!diagramExpanded">
+      <ion-text color="medium" class="diagram-toggle">
+        <ion-icon [name]="diagramExpanded ? 'chevron-up' : 'chevron-down'"></ion-icon>
+        {{ diagramExpanded ? 'Collapse diagram' : 'Expand diagram' }}
+      </ion-text>
+    </div>
+
     <!-- Prompt selector -->
     <ion-item class="prompt-select">
       <ion-label position="stacked">Sample Prompt (used for Steps 2–4)</ion-label>

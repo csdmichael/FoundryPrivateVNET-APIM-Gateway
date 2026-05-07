@@ -73,6 +73,12 @@ sequenceDiagram
 
 The API-based message extension path (compose box) is shorter — Teams calls APIM `/chat` directly and renders the response as an Adaptive Card, bypassing the Bot Service entirely.
 
+### Data pipeline sequence
+
+The pipeline tester UI validates each hop in this sequence. When troubleshooting, failures at any stage pinpoint the broken layer:
+
+![Data Pipeline Sequence](docs/DataPipelineSequence.png)
+
 ## Technologies Used
 
 | Technology | Role |

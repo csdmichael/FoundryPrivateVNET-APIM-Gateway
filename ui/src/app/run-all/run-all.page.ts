@@ -41,6 +41,7 @@ export class RunAllPage implements OnInit, OnDestroy {
   passedCount = 0;
   failedCount = 0;
   allCopied = false;
+  diagramExpanded = false;
   private sub?: Subscription;
 
   constructor(

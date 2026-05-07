@@ -311,6 +311,63 @@
           "200": { "description": "Sanitised Azure resource config" }
         }
       }
+    },
+    "/health": {
+      "get": {
+        "operationId": "healthLegacy",
+        "responses": { "200": { "description": "Service health (legacy path)" } }
+      }
+    },
+    "/prompts": {
+      "get": {
+        "operationId": "getPromptsLegacy",
+        "parameters": [
+          { "name": "use_case", "in": "query", "required": true, "schema": { "type": "string", "enum": ["tax_pdf_forms", "eng_design_ppt"] } }
+        ],
+        "responses": { "200": { "description": "Prompt catalog (legacy path)" } }
+      }
+    },
+    "/chat": {
+      "post": {
+        "operationId": "chatLegacy",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["prompt", "use_case"],
+                "properties": {
+                  "prompt": { "type": "string" },
+                  "use_case": { "type": "string", "enum": ["tax_pdf_forms", "eng_design_ppt"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Chat completion (legacy path)" } }
+      }
+    },
+    "/batch": {
+      "post": {
+        "operationId": "batchLegacy",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["prompts", "use_case"],
+                "properties": {
+                  "prompts": { "type": "array", "items": { "type": "string" } },
+                  "use_case": { "type": "string", "enum": ["tax_pdf_forms", "eng_design_ppt"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Batch response (legacy path)" } }
+      }
     }
   }
 }
