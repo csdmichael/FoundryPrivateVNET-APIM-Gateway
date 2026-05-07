@@ -16,6 +16,7 @@ The primary case study is **publishing AI agents to Microsoft Teams**. Each Foun
 - [Bot Registration](#bot-registration)
 - [APIM Configuration](#apim-configuration)
 - [AI Gateway Screenshots](#ai-gateway-screenshots)
+- [Pipeline Testing UI](#pipeline-testing-ui)
 - [Configuration](#configuration)
 - [Deployment](#deployment)
 - [GitHub Actions Setup](#github-actions-setup)
@@ -83,6 +84,7 @@ The API-based message extension path (compose box) is shorter — Teams calls AP
 | **Azure Bot Service** | Teams channel registration and activity relay |
 | **Azure Functions** (Python 3.11) | Bot application runtime (Linux consumption plan) |
 | **Microsoft Teams** | End-user chat interface via API-based message extensions |
+| **Ionic / Angular** | Pipeline testing UI — responsive dashboard for end-to-end troubleshooting |
 | **Terraform** | Infrastructure provisioning (VNet, private endpoints, DNS, APIM, bot) |
 | **Azure VNet + Private Endpoints** | Network isolation for Foundry and Search |
 | **Private DNS Zones** | Name resolution for private endpoints inside the VNet |
@@ -141,7 +143,22 @@ FoundryPrivateVNET-APIM-Gateway/
 │   └── test-sample-prompts.ps1    # APIM smoke tests
 │
 ├── api/                           # Optional App Service API layer
-├── ui/                            # Optional App Service UI layer
+├── ui/                            # Ionic/Angular testing UI — pipeline troubleshooting dashboard
+│   ├── src/app/
+│   │   ├── home/                  # Landing page — purpose, quick-start, 5-step pipeline overview
+│   │   ├── test-search/           # Step 1: AI Search health check (doc count, fields, storage)
+│   │   ├── test-foundry/          # Step 2: Foundry Agent direct test (bypasses APIM)
+│   │   ├── test-apim/             # Step 3: APIM Gateway test (same prompt through gateway)
+│   │   ├── test-bot/              # Step 4: Bot Service test (full Teams pipeline)
+│   │   ├── agent-package/         # Step 5: Build/download Teams agent package + Dev Portal link
+│   │   ├── shared/                # Reusable KPI badges and master-detail result cards
+│   │   ├── services/              # API service, use-case service, device detection service
+│   │   ├── chat/                  # Interactive chat page
+│   │   ├── prompts/               # Sample prompt browser
+│   │   └── documents/             # Document explorer
+│   ├── server.js                  # Express static server for production
+│   ├── deploy-package.json        # Production-only package.json (Express dependency)
+│   └── package.json               # Angular/Ionic dev dependencies
 ├── requirements.txt               # Python dependencies
 ├── requirements-api.txt
 ├── requirements-deploy.txt
@@ -433,6 +450,94 @@ The APIM Test console shows the imported `002-ai-poc-private` API with all OpenA
 
 ![Test Foundry API in APIM](docs/Screenshots/04.%20Test%20Foundry%20API%20in%20APIM.png)
 
+## Pipeline Testing UI
+
+The `ui/` folder contains an **Ionic / Angular / TypeScript** dashboard for end-to-end troubleshooting of the data pipeline. It walks through each layer of the architecture sequentially so you can pinpoint exactly where a failure occurs.
+
+### Purpose
+
+When something breaks in the chain **AI Search → Foundry Agent → APIM → Bot Service → Teams**, this UI lets you test each hop independently with the same sample prompt, compare response times, and inspect detailed error messages — all from a single browser tab.
+
+### Test steps
+
+| Step | Page | What it tests |
+|------|------|---------------|
+| 1 | **AI Search Health** | Service reachability, index existence, document count, storage size, field schema |
+| 2 | **Foundry Agent (Direct)** | Send a sample prompt directly to the Foundry project endpoint, bypassing APIM |
+| 3 | **APIM Gateway** | Route the same prompt through APIM to verify gateway policies and routing |
+| 4 | **Bot Service** | Send the prompt to the Bot Service API to validate the full Teams-compatible chat pipeline |
+| 5 | **Agent Package** | Build the Teams agent .zip, download it, and link to the Teams Developer Portal for import |
+
+### Use-case selection
+
+The header contains a session-level use-case selector (default: **Tax PDF Forms**). Switching the use case changes the available sample prompts, the target search index, and the agent being tested across all pages.
+
+### Responsive layout
+
+The UI renders a device-appropriate layout:
+
+| Device | Behaviour |
+|--------|-----------|
+| **Desktop** (≥ 1200 px) | 3-column card grid, full side menu, max-width constrained content |
+| **Tablet** (768–1199 px) | 2-column card grid, collapsible menu, medium padding |
+| **Mobile** (< 768 px) | Single-column stack, hamburger menu, compact typography |
+
+### KPIs and master-detail results
+
+Every test step displays:
+
+- **Status badge** — PASS / FAIL with colour coding
+- **Latency** — response time in milliseconds (green < 3 s, yellow < 10 s, red ≥ 10 s)
+- **Error list** — expandable section with full error messages
+- **Endpoint** — the actual URL that was called
+- **Response body** — full agent response text with source citations
+
+Results are shown in expandable master-detail cards. Click the header to toggle the detail pane.
+
+### API endpoints
+
+The testing UI calls these backend endpoints (all under `/api/test/`):
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/test/search-health?use_case=…` | GET | AI Search health check with index stats |
+| `/api/test/foundry-direct` | POST | Test Foundry Agent directly (no APIM) |
+| `/api/test/apim` | POST | Test agent via APIM gateway |
+| `/api/test/bot-service` | POST | Test Bot Service chat endpoint |
+| `/api/test/agent-packages?use_case=…` | GET | List agent package files |
+| `/api/test/agent-packages/build?use_case=…` | POST | Build the .zip package |
+| `/api/test/agent-packages/download?use_case=…` | GET | Download the .zip |
+
+### Live URL
+
+The deployed testing UI is available at:
+
+**[https://foundry-privatevnet-ui.azurewebsites.net](https://foundry-privatevnet-ui.azurewebsites.net)**
+
+Open the link, select a use case from the header, and walk through Steps 1–5 to test the full data flow from AI Search to Foundry Agent to APIM to Bot Service.
+
+### Running locally
+
+```bash
+# Terminal 1 — API backend
+cd api
+uvicorn server:app --reload --port 8000
+
+# Terminal 2 — UI dev server
+cd ui
+npm install
+npm start          # serves at http://localhost:4200
+```
+
+### Deployment
+
+The UI deploys to the `foundry-privatevnet-ui` Azure App Service. A dedicated GitHub Actions workflow (`.github/workflows/deploy-ui.yml`) triggers on changes to `ui/**` or `config/**`:
+
+1. `npm ci` + `ng build --configuration production` → produces `www/`
+2. Packages `www/`, `server.js`, and `deploy-package.json` into a deploy archive
+3. Deploys via `azure/webapps-deploy@v3` with SCM build enabled
+4. Verifies the site returns HTTP 2xx with retry logic
+
 ## Configuration
 
 All runtime configuration lives in the `config/` folder. These JSON files are loaded by `config/__init__.py` and shared across deployment scripts, provisioning scripts, and the API layer.
@@ -545,11 +650,12 @@ Current workflow split:
 
 - `deploy-infra.yml` for Terraform and resource import changes
 - `deploy-bot.yml` for the bot function apps (matrix deploys to both `func-fdryvnetgw-tax-bot-eastus` and `func-fdryvnetgw-eng-bot-eastus`)
+- `deploy-ui.yml` for the testing UI (builds Angular production bundle, deploys to `foundry-privatevnet-ui` App Service)
 - `configure-platform.yml` for APIM and Foundry AI gateway configuration
 - `provision-search-agents.yml` for two-phase Search asset provisioning followed by Foundry agent provisioning
 - `package-teams-agents.yml` for Teams package zips
 
-The API and UI deployment workflows are currently disabled.
+The API deployment workflow is currently disabled. The UI workflow triggers on pushes to `main` that change files under `ui/` or `config/`.
 
 Pushes to `main` trigger only the workflows whose path filters match the changed component. Changes limited to `README.md` or files under `docs/` do not trigger any deployment workflow.
 
@@ -563,7 +669,7 @@ Recommended operator flow:
 Notes:
 
 - The workflows still use a single Terraform configuration and a branch-scoped OIDC credential for `main`.
-- API and UI GitHub Actions deployments are currently disabled, so App Service changes for those components are not deployed through the active workflow set.
+- The API GitHub Actions deployment is currently disabled. The UI workflow (`deploy-ui.yml`) is active and triggers on `ui/**` and `config/**` changes.
 - Docs-only updates are ignored by deployment workflows.
 - Agent provisioning requires the current deployment principal to have `Azure AI User` on the target Foundry account. In CI, the provisioning workflow treats that as a prerequisite and does not attempt self-assignment. For local privileged runs, set `AUTO_ASSIGN_FOUNDRY_ROLE=true` to let the script try the role assignment automatically.
 - The `provision-search-agents.yml` workflow runs Search provisioning first and agent provisioning second. If Foundry RBAC is missing, Search assets are still refreshed and the workflow writes the exact remediation command to the GitHub job summary instead of failing the whole run.
