@@ -7,6 +7,10 @@ const routes: Routes = [
     loadChildren: () => import('./home/home.module').then(m => m.HomePageModule),
   },
   {
+    path: 'run-all',
+    loadChildren: () => import('./run-all/run-all.module').then(m => m.RunAllPageModule),
+  },
+  {
     path: 'test-search',
     loadChildren: () => import('./test-search/test-search.module').then(m => m.TestSearchPageModule),
   },

@@ -57,9 +57,9 @@ jobs:
           source scripts/deploy-helpers.sh
           RG="${{ steps.config.outputs.resource_group }}"
 
-          deploy_and_wait "${{ steps.config.outputs.tax_bot }}" "$RG" .deploy/bot-package.zip 300 &
+          deploy_and_wait "${{ steps.config.outputs.tax_bot }}" "$RG" .deploy/bot-package.zip 600 &
           PID_TAX=$!
-          deploy_and_wait "${{ steps.config.outputs.eng_bot }}" "$RG" .deploy/bot-package.zip 300 &
+          deploy_and_wait "${{ steps.config.outputs.eng_bot }}" "$RG" .deploy/bot-package.zip 600 &
           PID_ENG=$!
 
           FAILED=0

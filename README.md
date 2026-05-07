@@ -132,6 +132,7 @@ FoundryPrivateVNET-APIM-Gateway/
 │
 ├── scripts/
 │   ├── deploy.ps1                 # Main deployment orchestrator
+│   ├── deploy-helpers.sh          # Shared bash deploy helper — ARM-based zip deploy with status polling
 │   ├── configure-apim.ps1         # APIM API/product/policy setup
 │   ├── configure-foundry-ai-gateway.ps1  # Foundry OpenAI gateway APIM surface
 │   ├── ensure-foundry-search-connection.ps1
@@ -146,6 +147,7 @@ FoundryPrivateVNET-APIM-Gateway/
 ├── ui/                            # Ionic/Angular testing UI — pipeline troubleshooting dashboard
 │   ├── src/app/
 │   │   ├── home/                  # Landing page — purpose, quick-start, 5-step pipeline overview
+│   │   ├── run-all/               # Run All Tests — sequential runner, continues on failure, full report
 │   │   ├── test-search/           # Step 1: AI Search health check (doc count, fields, storage)
 │   │   ├── test-foundry/          # Step 2: Foundry Agent direct test (bypasses APIM)
 │   │   ├── test-apim/             # Step 3: APIM Gateway test (same prompt through gateway)
@@ -465,8 +467,18 @@ When something breaks in the chain **AI Search → Foundry Agent → APIM → Bo
 | 1 | **AI Search Health** | Service reachability, index existence, document count, storage size, field schema |
 | 2 | **Foundry Agent (Direct)** | Send a sample prompt directly to the Foundry project endpoint, bypassing APIM |
 | 3 | **APIM Gateway** | Route the same prompt through APIM to verify gateway policies and routing |
-| 4 | **Bot Service** | Send the prompt to the Bot Service API to validate the full Teams-compatible chat pipeline |
+| 4 | **Bot Service** | Health-check the bot function app, then call the APIM chat endpoint the bot uses internally |
 | 5 | **Agent Package** | Build the Teams agent .zip, download it, and link to the Teams Developer Portal for import |
+
+### Run All Tests
+
+The **Run All Tests** page (`/run-all`) executes all 5 steps sequentially with a single click. Each step proceeds even if the previous one fails, giving a full diagnostic report with:
+
+- **Progress bar** and real-time KPI summary (passed / failed / total time)
+- **Per-step status** — PASS/FAIL badge, latency, spinning icon for the active step
+- **Expandable error details** — click any completed step to see full errors, response text, sources, and endpoints
+
+This is the recommended starting point for troubleshooting — run all tests first, then drill into individual pages for the steps that failed.
 
 ### Use-case selection
 
@@ -503,7 +515,7 @@ The testing UI calls these backend endpoints (all under `/api/test/`):
 | `/api/test/search-health?use_case=…` | GET | AI Search health check with index stats |
 | `/api/test/foundry-direct` | POST | Test Foundry Agent directly (no APIM) |
 | `/api/test/apim` | POST | Test agent via APIM gateway |
-| `/api/test/bot-service` | POST | Test Bot Service chat endpoint |
+| `/api/test/bot-service` | POST | Bot health check + APIM chat test (same path bot uses internally) |
 | `/api/test/agent-packages?use_case=…` | GET | List agent package files |
 | `/api/test/agent-packages/build?use_case=…` | POST | Build the .zip package |
 | `/api/test/agent-packages/download?use_case=…` | GET | Download the .zip |
@@ -534,9 +546,15 @@ npm start          # serves at http://localhost:4200
 The UI deploys to the `foundry-privatevnet-ui` Azure App Service. A dedicated GitHub Actions workflow (`.github/workflows/deploy-ui.yml`) triggers on changes to `ui/**` or `config/**`:
 
 1. `npm ci` + `ng build --configuration production` → produces `www/`
-2. Packages `www/`, `server.js`, and `deploy-package.json` into a deploy archive
-3. Deploys via `azure/webapps-deploy@v3` with SCM build enabled
+2. Packages `www/`, `server.js`, and `deploy-package.json` into a deploy zip
+3. Deploys via ARM-based zip deploy (`az webapp deploy`) with status polling through `scripts/deploy-helpers.sh`
 4. Verifies the site returns HTTP 2xx with retry logic
+
+All deployment workflows share `scripts/deploy-helpers.sh` which handles the common deployment challenges on VNet-integrated App Services:
+
+- Submits the zip via `az webapp deploy` (ARM-authenticated, no Kudu basic auth needed)
+- If the deploy command times out (504), polls the ARM deployments API until the deployment completes or fails
+- 600-second timeout accommodates first-boot dependency installation
 
 ## Configuration
 
@@ -545,7 +563,7 @@ All runtime configuration lives in the `config/` folder. These JSON files are lo
 | File | Purpose |
 |------|---------|
 | `agent_config.json` | Foundry agent definitions — one entry per use case with `name`, `model_deployment`, and `instructions` |
-| `azure_resources.json` | Central map of all Azure resource IDs, endpoints, and per-use-case paths (APIM, Foundry, Search, Cosmos DB, App Services) |
+| `azure_resources.json` | Central map of all Azure resource IDs, endpoints, bot function app names, and per-use-case paths (APIM, Foundry, Search, Cosmos DB, App Services) |
 | `document_config.json` | Sample document metadata (filename, doc_id, title) used to seed and validate each use-case Search index |
 | `prompts_config.json` | Sample prompts grouped by query type (`keyword`, `semantic`, `agent`) for smoke-testing each agent |
 | `search_config.json` | Azure AI Search index and indexer names for each use case, used by the clone and provisioning scripts |
@@ -650,7 +668,7 @@ Current workflow split:
 
 - `deploy-infra.yml` for Terraform and resource import changes
 - `deploy-api.yml` for the API backend (deploys to `foundry-privatevnet-api` App Service, re-imports OpenAPI spec into APIM)
-- `deploy-bot.yml` for the bot function apps (matrix deploys to both `func-fdryvnetgw-tax-bot-eastus` and `func-fdryvnetgw-eng-bot-eastus`)
+- `deploy-bot.yml` for the bot function apps (deploys both `func-fdryvnetgw-tax-bot-eastus` and `func-fdryvnetgw-eng-bot-eastus` in parallel from a single job)
 - `deploy-ui.yml` for the testing UI (builds Angular production bundle, deploys to `foundry-privatevnet-ui` App Service)
 - `configure-platform.yml` for APIM and Foundry AI gateway configuration
 - `provision-search-agents.yml` for two-phase Search asset provisioning followed by Foundry agent provisioning

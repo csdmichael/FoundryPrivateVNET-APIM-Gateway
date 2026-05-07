@@ -1,0 +1,108 @@
+<ion-content class="ion-padding">
+  <div class="page-container" [class.desktop]="device.isDesktop" [class.tablet]="device.isTablet">
+    <h2><ion-icon name="play-circle-outline"></ion-icon> Run All Tests</h2>
+    <p class="page-desc">
+      Run all 5 pipeline tests sequentially for <strong>{{ uc.active.label }}</strong>.
+      Each step proceeds even if the previous one fails, so you get a full diagnostic report.
+    </p>
+
+    <!-- Prompt selector -->
+    <ion-item class="prompt-select">
+      <ion-label position="stacked">Sample Prompt (used for Steps 2–4)</ion-label>
+      <ion-select [(ngModel)]="selectedPrompt" interface="action-sheet" placeholder="Choose a prompt...">
+        <ion-select-option *ngFor="let p of prompts" [value]="p.text">
+          [{{ p.category }}] {{ p.text | slice:0:80 }}{{ p.text.length > 80 ? '...' : '' }}
+        </ion-select-option>
+      </ion-select>
+    </ion-item>
+
+    <div class="action-row">
+      <ion-button (click)="runAll()" [disabled]="running || !selectedPrompt" expand="block" class="run-btn">
+        <ion-spinner *ngIf="running" name="crescent" slot="start"></ion-spinner>
+        <ion-icon *ngIf="!running" name="play-outline" slot="start"></ion-icon>
+        {{ running ? 'Running...' : 'Run All Tests' }}
+      </ion-button>
+      <ion-button (click)="resetSteps()" fill="outline" [disabled]="running" class="reset-btn">
+        <ion-icon name="refresh-outline" slot="start"></ion-icon> Reset
+      </ion-button>
+    </div>
+
+    <!-- Summary KPIs -->
+    <div *ngIf="completedCount > 0" class="kpi-row summary-row">
+      <app-kpi-badge [value]="passedCount + '/' + steps.length" label="Passed" [color]="failedCount === 0 ? 'success' : 'warning'"></app-kpi-badge>
+      <app-kpi-badge [value]="failedCount" label="Failed" [color]="failedCount > 0 ? 'danger' : 'success'"></app-kpi-badge>
+      <app-kpi-badge [value]="totalDurationMs + 'ms'" label="Total Time" color=""></app-kpi-badge>
+      <app-kpi-badge [value]="completedCount + '/' + steps.length" label="Completed" color=""></app-kpi-badge>
+    </div>
+
+    <!-- Progress bar -->
+    <ion-progress-bar *ngIf="running" [value]="completedCount / steps.length" color="primary" class="progress"></ion-progress-bar>
+
+    <!-- Step results -->
+    <div class="steps-list">
+      <ion-card *ngFor="let step of steps" class="step-card"
+        [class.step-pass]="step.status === 'pass'"
+        [class.step-fail]="step.status === 'fail'"
+        [class.step-running]="step.status === 'running'">
+
+        <ion-card-header class="step-header" (click)="step.status !== 'pending' && step.status !== 'running' ? step._expanded = !step._expanded : null">
+          <div class="step-num-badge" [class]="'badge-' + step.status">{{ step.num }}</div>
+          <ion-icon [name]="statusIcon(step.status)" [color]="statusColor(step.status)" class="status-icon"
+            [class.spin]="step.status === 'running'"></ion-icon>
+          <ion-card-title class="step-title">{{ step.title }}</ion-card-title>
+          <ion-badge *ngIf="step.durationMs !== null" color="medium" class="duration-badge">{{ step.durationMs }}ms</ion-badge>
+          <ion-icon *ngIf="step.status !== 'pending' && step.status !== 'running'"
+            [name]="step._expanded ? 'chevron-up' : 'chevron-down'" class="expand-icon"></ion-icon>
+        </ion-card-header>
+
+        <!-- Expanded detail -->
+        <ion-card-content *ngIf="step._expanded">
+          <!-- Errors -->
+          <div *ngIf="step.errors.length > 0" class="errors-block">
+            <ion-text color="danger"><strong>Errors ({{ step.errors.length }}):</strong></ion-text>
+            <ul>
+              <li *ngFor="let e of step.errors" class="error-item">{{ e }}</li>
+            </ul>
+          </div>
+
+          <!-- Step-specific detail -->
+          <!-- Step 1: Search -->
+          <div *ngIf="step.num === 1 && step.detail">
+            <div class="kpi-row">
+              <app-kpi-badge [value]="step.detail.document_count" label="Docs" [color]="step.detail.document_count > 0 ? 'success' : 'danger'"></app-kpi-badge>
+              <app-kpi-badge [value]="step.detail.fields?.length || 0" label="Fields" color=""></app-kpi-badge>
+            </div>
+            <div class="detail-row"><strong>Index:</strong> <code>{{ step.detail.index_name }}</code></div>
+            <div class="detail-row"><strong>Endpoint:</strong> <code>{{ step.detail.search_endpoint }}</code></div>
+          </div>
+
+          <!-- Steps 2-3: Foundry/APIM -->
+          <div *ngIf="(step.num === 2 || step.num === 3) && step.detail">
+            <div class="detail-row"><strong>Endpoint:</strong> <code>{{ step.detail.endpoint }}</code></div>
+            <div *ngIf="step.detail.response" class="response-block">{{ step.detail.response }}</div>
+            <div *ngIf="step.detail.sources?.length" class="sources-row">
+              <ion-chip *ngFor="let s of step.detail.sources" color="tertiary" outline>{{ s | slice:0:50 }}</ion-chip>
+            </div>
+          </div>
+
+          <!-- Step 4: Bot -->
+          <div *ngIf="step.num === 4 && step.detail">
+            <div class="kpi-row">
+              <app-kpi-badge [value]="step.detail.bot_healthy ? 'UP' : 'DOWN'" label="Bot Health" [color]="step.detail.bot_healthy ? 'success' : 'danger'"></app-kpi-badge>
+            </div>
+            <div class="detail-row"><strong>Bot App:</strong> <code>{{ step.detail.bot_endpoint }}</code></div>
+            <div class="detail-row"><strong>APIM Chat:</strong> <code>{{ step.detail.apim_chat_url }}</code></div>
+            <div *ngIf="step.detail.response" class="response-block">{{ step.detail.response }}</div>
+          </div>
+
+          <!-- Step 5: Package -->
+          <div *ngIf="step.num === 5 && step.detail">
+            <div class="detail-row"><strong>Agent:</strong> {{ step.detail.agent_name }}</div>
+            <div class="detail-row"><strong>Package built:</strong> {{ step.detail.package_exists ? 'Yes' : 'No' }}</div>
+            <div class="detail-row"><strong>Files:</strong> {{ step.detail.files?.join(', ') }}</div>
+          </div>
+        </ion-card-content>
+      </ion-card>
+    </div>
+  </div>
+</ion-content>

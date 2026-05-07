@@ -66,7 +66,7 @@ jobs:
           source scripts/deploy-helpers.sh
           deploy_and_wait "${{ steps.config.outputs.api_app_name }}" \
             "${{ steps.config.outputs.resource_group }}" \
-            .deploy/api-package.zip 300
+            .deploy/api-package.zip 600
 
       - name: Re-import OpenAPI spec into APIM
         shell: bash

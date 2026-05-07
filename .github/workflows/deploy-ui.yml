@@ -81,7 +81,7 @@ jobs:
           source scripts/deploy-helpers.sh
           deploy_and_wait "${{ steps.config.outputs.ui_app_name }}" \
             "${{ steps.config.outputs.resource_group }}" \
-            .deploy/ui-package.zip 300
+            .deploy/ui-package.zip 600
 
       - name: Verify health
         shell: bash

@@ -1,0 +1,110 @@
+@use '../test-common';
+
+.action-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+  .run-btn { flex: 1; max-width: 300px; }
+  .reset-btn { flex-shrink: 0; }
+}
+
+.summary-row {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--ion-color-light);
+  border-radius: 8px;
+}
+
+.progress {
+  margin-bottom: 16px;
+  --progress-background: var(--ion-color-primary);
+}
+
+.steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.step-card {
+  margin: 0;
+  transition: border-left-color 0.2s;
+  border-left: 4px solid var(--ion-color-medium-tint);
+}
+.step-pass { border-left-color: var(--ion-color-success); }
+.step-fail { border-left-color: var(--ion-color-danger); }
+.step-running { border-left-color: var(--ion-color-primary); }
+
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 12px 16px;
+}
+
+.step-num-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #fff;
+  background: var(--ion-color-medium);
+  flex-shrink: 0;
+}
+.badge-pass { background: var(--ion-color-success); }
+.badge-fail { background: var(--ion-color-danger); }
+.badge-running { background: var(--ion-color-primary); }
+
+.status-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.step-title {
+  flex: 1;
+  font-size: 0.95rem;
+}
+
+.duration-badge { font-size: 0.75rem; }
+.expand-icon { font-size: 18px; color: var(--ion-color-medium); }
+
+.errors-block {
+  background: rgba(var(--ion-color-danger-rgb), 0.06);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  ul { margin: 4px 0 0; padding-left: 18px; }
+  .error-item { font-size: 0.85rem; color: var(--ion-color-danger-shade); margin-bottom: 4px; }
+}
+
+.response-block {
+  margin-top: 8px;
+  padding: 10px;
+  background: var(--ion-color-light);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.sources-row {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
