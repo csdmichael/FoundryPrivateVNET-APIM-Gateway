@@ -40,6 +40,7 @@ jobs:
           rm -rf .deploy/api-package
           mkdir -p .deploy/api-package
           cp api/server.py .deploy/api-package/server.py
+          cp api/startup.sh .deploy/api-package/startup.sh
           cp requirements-api.txt .deploy/api-package/requirements.txt
           cp -R config .deploy/api-package/
           find .deploy/api-package -type d -name '__pycache__' -prune -exec rm -rf {} +
@@ -58,8 +59,11 @@ jobs:
           RG="${{ steps.config.outputs.resource_group }}"
           az webapp config appsettings set --name "$APP" --resource-group "$RG" \
             --settings SCM_DO_BUILD_DURING_DEPLOYMENT=false ENABLE_ORYX_BUILD=false \
-              WEBSITES_CONTAINER_START_TIME_LIMIT=600 \
+              WEBSITES_CONTAINER_START_TIME_LIMIT=1800 \
             --output none
+
+          az webapp config set --name "$APP" --resource-group "$RG" \
+            --startup-file "bash /home/site/wwwroot/startup.sh" --output none
 
       - name: Deploy via Kudu async zip
         shell: bash
