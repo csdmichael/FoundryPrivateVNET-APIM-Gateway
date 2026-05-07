@@ -1,0 +1,79 @@
+name: deploy-ui
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'ui/**'
+      - 'config/**'
+      - '.github/workflows/deploy-ui.yml'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ui
+        run: npm ci
+
+      - name: Build production bundle
+        working-directory: ui
+        run: npm run build -- --configuration production
+
+      - name: Prepare deploy package
+        shell: bash
+        run: |
+          rm -rf .deploy/ui-package
+          mkdir -p .deploy/ui-package
+          cp -R ui/www .deploy/ui-package/
+          cp ui/server.js .deploy/ui-package/
+          cp ui/deploy-package.json .deploy/ui-package/package.json
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: foundry-privatevnet-ui
+          package: .deploy/ui-package
+          scm-do-build-during-deployment: true
+          track-status: false
+
+      - name: Verify health
+        shell: bash
+        run: |
+          max_attempts=6
+          delay=15
+          sleep 15
+          for attempt in $(seq 1 $max_attempts); do
+            status=$(curl -s -o /dev/null -w "%{http_code}" https://foundry-privatevnet-ui.azurewebsites.net/)
+            if [ "$status" -ge 200 ] && [ "$status" -lt 400 ]; then
+              echo "Health check passed (HTTP $status)"
+              break
+            fi
+            if [ $attempt -lt $max_attempts ]; then
+              echo "Health check failed HTTP $status (attempt $attempt/$max_attempts), retrying in ${delay}s..."
+              sleep $delay
+            else
+              echo "Health check failed after $max_attempts attempts (HTTP $status)"
+              exit 1
+            fi
+          done
