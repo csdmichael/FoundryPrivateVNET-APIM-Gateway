@@ -9,26 +9,29 @@ set -euo pipefail
 deploy_and_wait() {
   local app="$1" rg="$2" src="$3" max_wait="${4:-300}"
 
-  echo "==> Submitting async zip deploy for $app"
+  echo "==> Deploying $app via Kudu async zipdeploy"
 
-  # Get publishing credentials for Kudu status polling
-  local creds user pass
-  creds=$(az webapp deployment list-publishing-credentials \
-    --name "$app" --resource-group "$rg" -o json 2>/dev/null)
-  user=$(echo "$creds" | jq -r '.publishingUserName')
-  pass=$(echo "$creds" | jq -r '.publishingPassword')
+  # Get Azure bearer token for Kudu (works even when basic auth is disabled)
+  local token
+  token=$(az account get-access-token --query accessToken -o tsv)
 
   # Submit deployment via Kudu zipdeploy API (async — returns 202 immediately)
   local http_code
   http_code=$(curl -s -o /dev/null -w "%{http_code}" \
     -X POST "https://${app}.scm.azurewebsites.net/api/zipdeploy?isAsync=true" \
-    -u "$user:$pass" \
+    -H "Authorization: Bearer $token" \
     -H "Content-Type: application/zip" \
     --data-binary "@${src}" \
     --max-time 120)
 
   if [ "$http_code" != "202" ] && [ "$http_code" != "200" ]; then
-    echo "WARNING: Kudu zipdeploy returned HTTP $http_code (expected 202). Checking status anyway..."
+    echo "ERROR: Kudu zipdeploy returned HTTP $http_code"
+    if [ "$http_code" == "409" ]; then
+      echo "Another deployment is in progress. Waiting for it to finish..."
+    elif [ "$http_code" == "401" ] || [ "$http_code" == "403" ]; then
+      echo "Auth failed. Ensure the deployment principal has Website Contributor on the App Service."
+      return 1
+    fi
   fi
 
   # Poll deployment status until complete
@@ -38,10 +41,16 @@ deploy_and_wait() {
     sleep $interval
     elapsed=$((elapsed + interval))
 
-    local status
-    status=$(curl -s -u "$user:$pass" \
-      "https://${app}.scm.azurewebsites.net/api/deployments/latest" \
-      2>/dev/null | jq -r '.status // empty' 2>/dev/null || echo "")
+    # Refresh token if close to expiry (tokens last ~60 min, this is cheap)
+    if [ $((elapsed % 300)) -eq 0 ]; then
+      token=$(az account get-access-token --query accessToken -o tsv)
+    fi
+
+    local response status
+    response=$(curl -s \
+      -H "Authorization: Bearer $token" \
+      "https://${app}.scm.azurewebsites.net/api/deployments/latest" 2>/dev/null || echo "{}")
+    status=$(echo "$response" | jq -r '.status // empty' 2>/dev/null || echo "")
 
     case "$status" in
       4)
@@ -50,14 +59,22 @@ deploy_and_wait() {
         ;;
       3)
         echo "==> $app deployment FAILED"
-        # Print last deployment log for diagnostics
-        curl -s -u "$user:$pass" \
+        curl -s -H "Authorization: Bearer $token" \
           "https://${app}.scm.azurewebsites.net/api/deployments/latest/log" \
           2>/dev/null | jq -r '.[].message // empty' 2>/dev/null || true
         return 1
         ;;
+      "")
+        # Empty status could mean no deployment yet or auth issue — check if we got a valid response
+        local has_id
+        has_id=$(echo "$response" | jq -r '.id // empty' 2>/dev/null || echo "")
+        if [ -z "$has_id" ] && [ $elapsed -ge 60 ]; then
+          echo "WARNING: No deployment status after ${elapsed}s. Response: $(echo "$response" | head -c 200)"
+        fi
+        echo "    $app deploying... (${elapsed}/${max_wait}s)"
+        ;;
       *)
-        echo "    $app deploy in progress... (${elapsed}/${max_wait}s, status=$status)"
+        echo "    $app deploying... (${elapsed}/${max_wait}s, status=$status)"
         ;;
     esac
   done
