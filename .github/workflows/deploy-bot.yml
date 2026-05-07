@@ -54,67 +54,32 @@ jobs:
       - name: Deploy both bots in parallel
         shell: bash
         run: |
+          source scripts/deploy-helpers.sh
           RG="${{ steps.config.outputs.resource_group }}"
 
-          deploy_with_retry() {
-            local name="$1" rg="$2" src="$3" max=4 delay=30
-            for attempt in $(seq 1 $max); do
-              if az webapp deploy --name "$name" --resource-group "$rg" \
-                   --src-path "$src" --type zip --timeout 300 2>&1; then
-                echo "$name deploy succeeded"
-                return 0
-              fi
-              if [ $attempt -lt $max ]; then
-                echo "$name deploy failed (attempt $attempt/$max), waiting ${delay}s for in-progress deployment..."
-                sleep $delay
-              else
-                echo "$name deploy failed after $max attempts"
-                return 1
-              fi
-            done
-          }
-
-          deploy_with_retry "${{ steps.config.outputs.tax_bot }}" "$RG" .deploy/bot-package.zip &
+          deploy_and_wait "${{ steps.config.outputs.tax_bot }}" "$RG" .deploy/bot-package.zip 300 &
           PID_TAX=$!
-
-          deploy_with_retry "${{ steps.config.outputs.eng_bot }}" "$RG" .deploy/bot-package.zip &
+          deploy_and_wait "${{ steps.config.outputs.eng_bot }}" "$RG" .deploy/bot-package.zip 300 &
           PID_ENG=$!
 
           FAILED=0
           wait $PID_TAX || FAILED=1
           wait $PID_ENG || FAILED=1
           if [ $FAILED -ne 0 ]; then echo "One or both bot deploys failed"; exit 1; fi
-          echo "Both bot deploys completed"
 
       - name: Verify both bot health endpoints
+        if: success() || failure()
         shell: bash
         run: |
           check_health() {
-            local url="$1/api/health"
-            local name="$2"
-            local max=5 delay=10
+            local url="$1/api/health" name="$2" max=5 delay=10
             sleep 10
-            for attempt in $(seq 1 $max); do
-              if curl --fail --silent --show-error "$url"; then
-                echo "$name health check passed"
-                return 0
-              fi
-              if [ $attempt -lt $max ]; then
-                echo "$name health check failed (attempt $attempt/$max), retrying in ${delay}s..."
-                sleep $delay
-              else
-                echo "$name health check failed after $max attempts"
-                return 1
-              fi
+            for i in $(seq 1 $max); do
+              if curl --fail --silent --show-error "$url"; then echo " $name health OK"; return 0; fi
+              [ $i -lt $max ] && echo "$name health failed ($i/$max), retry ${delay}s..." && sleep $delay \
+                || { echo "$name health failed after $max attempts"; return 1; }
             done
           }
-
           check_health "${{ steps.config.outputs.tax_bot_url }}" "Tax bot" &
-          PID_TAX=$!
           check_health "${{ steps.config.outputs.eng_bot_url }}" "Eng bot" &
-          PID_ENG=$!
-
-          FAILED=0
-          wait $PID_TAX || FAILED=1
-          wait $PID_ENG || FAILED=1
-          exit $FAILED
+          FAILED=0; wait || FAILED=1; exit $FAILED

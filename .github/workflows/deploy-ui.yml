@@ -61,64 +61,35 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Configure and deploy
+      - name: Configure App Service
         shell: bash
         run: |
           APP="${{ steps.config.outputs.ui_app_name }}"
           RG="${{ steps.config.outputs.resource_group }}"
-
-          # Configure settings and deploy in parallel
           az webapp config appsettings set --name "$APP" --resource-group "$RG" \
             --settings SCM_DO_BUILD_DURING_DEPLOYMENT=false PORT=8080 \
-              API_BASE_URL="${{ steps.config.outputs.api_base_url }}" \
-            --output none &
-          PID_SETTINGS=$!
-
+              API_BASE_URL="${{ steps.config.outputs.api_base_url }}" --output none &
           az webapp config set --name "$APP" --resource-group "$RG" \
             --startup-file "node server.js" --output none &
-          PID_CONFIG=$!
-
           az webapp config appsettings delete --name "$APP" --resource-group "$RG" \
             --setting-names WEBSITE_RUN_FROM_PACKAGE --output none 2>/dev/null &
-          PID_DELETE=$!
+          wait
 
-          wait $PID_SETTINGS $PID_CONFIG
-          wait $PID_DELETE || true
-
-          # Deploy zip with retry for in-progress deployments
-          for attempt in 1 2 3 4; do
-            if az webapp deploy --name "$APP" --resource-group "$RG" \
-                 --src-path .deploy/ui-package.zip --type zip --timeout 300 2>&1; then
-              echo "UI deploy succeeded"
-              break
-            fi
-            if [ $attempt -lt 4 ]; then
-              echo "Deploy failed (attempt $attempt/4), waiting 30s for in-progress deployment..."
-              sleep 30
-            else
-              echo "Deploy failed after 4 attempts"
-              exit 1
-            fi
-          done
+      - name: Deploy via Kudu async zip
+        shell: bash
+        run: |
+          source scripts/deploy-helpers.sh
+          deploy_and_wait "${{ steps.config.outputs.ui_app_name }}" \
+            "${{ steps.config.outputs.resource_group }}" \
+            .deploy/ui-package.zip 300
 
       - name: Verify health
         shell: bash
         run: |
-          max_attempts=6
-          delay=10
-          sleep 15
-          for attempt in $(seq 1 $max_attempts); do
-            status=$(curl -s -o /dev/null -w "%{http_code}" ${{ steps.config.outputs.ui_url }}/)
-            if [ "$status" -ge 200 ] && [ "$status" -lt 400 ]; then
-              echo "Health check passed (HTTP $status)"
-              exit 0
-            fi
-            if [ $attempt -lt $max_attempts ]; then
-              echo "Health check failed HTTP $status (attempt $attempt/$max_attempts), retrying in ${delay}s..."
-              sleep $delay
-            else
-              echo "Health check failed after $max_attempts attempts (HTTP $status)"
-              exit 1
-            fi
-          done
+          max=6 delay=10; sleep 15
+          for i in $(seq 1 $max); do
+            status=$(curl -s -o /dev/null -w "%{http_code}" "${{ steps.config.outputs.ui_url }}/")
+            if [ "$status" -ge 200 ] && [ "$status" -lt 400 ]; then echo "Health OK (HTTP $status)"; exit 0; fi
+            [ $i -lt $max ] && echo "HTTP $status ($i/$max), retry ${delay}s..." && sleep $delay \
+              || { echo "Health failed after $max attempts (HTTP $status)"; exit 1; }
           done
