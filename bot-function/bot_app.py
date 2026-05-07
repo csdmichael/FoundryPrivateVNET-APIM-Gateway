@@ -22,9 +22,24 @@ for _candidate in [_bot_dir, _bot_dir.parent]:
         sys.path.insert(0, str(_candidate))
         break
 
-import config
+try:
+    import config as _project_config
+except Exception:
+    _project_config = None
 
-APIM_CHAT_URL = os.environ.get("APIM_CHAT_URL") or config.apim_chat_url()
+VALID_USE_CASES = ("tax_pdf_forms", "eng_design_ppt")
+DEFAULT_USE_CASE = "tax_pdf_forms"
+APIM_CHAT_URL = os.environ.get("APIM_CHAT_URL")
+
+if _project_config is not None:
+    VALID_USE_CASES = tuple(getattr(_project_config, "VALID_USE_CASES", VALID_USE_CASES))
+    DEFAULT_USE_CASE = getattr(_project_config, "DEFAULT_USE_CASE", DEFAULT_USE_CASE)
+    if not APIM_CHAT_URL:
+        APIM_CHAT_URL = _project_config.apim_chat_url()
+
+if not APIM_CHAT_URL:
+    APIM_CHAT_URL = "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/chat"
+
 BOT_APP_ID = os.environ.get("MicrosoftAppId", "")
 BOT_APP_PASSWORD = os.environ.get("MicrosoftAppPassword", "")
 
@@ -55,23 +70,29 @@ def _extract_prompt(activity: Activity) -> str:
 
 def _infer_use_case(activity: Activity, prompt: str) -> str:
     configured_use_case = os.environ.get("USE_CASE")
-    if configured_use_case in config.VALID_USE_CASES:
+    if configured_use_case in VALID_USE_CASES:
         return configured_use_case
+
+    if _project_config is None:
+        prompt_l = prompt.lower()
+        if any(token in prompt_l for token in ["engineering", "architecture", "ppt", "design"]):
+            return "eng_design_ppt"
+        return DEFAULT_USE_CASE
 
     haystacks = {
         use_case: " ".join(
-            [entry["text"] for entry in config.prompts_config()["use_cases"][use_case]["agent"]]
-            + [doc["title"] for doc in config.document_config()["use_cases"][use_case]["sample_documents"]]
-            + [doc["filename"] for doc in config.document_config()["use_cases"][use_case]["sample_documents"]]
+            [entry["text"] for entry in _project_config.prompts_config()["use_cases"][use_case]["agent"]]
+            + [doc["title"] for doc in _project_config.document_config()["use_cases"][use_case]["sample_documents"]]
+            + [doc["filename"] for doc in _project_config.document_config()["use_cases"][use_case]["sample_documents"]]
         )
-        for use_case in config.VALID_USE_CASES
+        for use_case in VALID_USE_CASES
     }
 
     prompt_words = _normalize_words(prompt)
     if not prompt_words:
-        return config.DEFAULT_USE_CASE
+        return DEFAULT_USE_CASE
 
-    best_use_case = config.DEFAULT_USE_CASE
+    best_use_case = DEFAULT_USE_CASE
     best_score = -1
     for use_case, haystack in haystacks.items():
         score = len(prompt_words & _normalize_words(haystack))

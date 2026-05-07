@@ -530,7 +530,7 @@ resource "azurerm_linux_web_app" "bot" {
     application_stack {
       python_version = "3.11"
     }
-      app_command_line = "gunicorn --bind=0.0.0.0:$PORT --timeout 600 -k aiohttp.GunicornWebWorker bot_app:app"
+      app_command_line = "/bin/bash /home/site/wwwroot/startup.sh"
   }
 
   app_settings = {
@@ -540,7 +540,9 @@ resource "azurerm_linux_web_app" "bot" {
     "MicrosoftAppTenantId"        = data.azurerm_client_config.current.tenant_id
     "APIM_CHAT_URL"               = "${data.azurerm_api_management.apim.gateway_url}/foundry-privatevnet-app/chat"
     "USE_CASE"                    = each.key
-    "SCM_DO_BUILD_DURING_DEPLOYMENT" = "true"
+    "SCM_DO_BUILD_DURING_DEPLOYMENT" = "false"
+    "ENABLE_ORYX_BUILD"           = "false"
+    "WEBSITE_RUN_FROM_PACKAGE"    = "0"
   }
 }
 

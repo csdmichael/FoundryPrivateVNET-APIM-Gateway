@@ -34,6 +34,7 @@ jobs:
           rm -rf .deploy/bot-package
           mkdir -p .deploy/bot-package
           cp bot-function/bot_app.py .deploy/bot-package/
+          cp bot-function/startup.sh .deploy/bot-package/
           cp bot-function/host.json .deploy/bot-package/
           cp bot-function/requirements.txt .deploy/bot-package/
           cp -R bot-function/health .deploy/bot-package/
@@ -46,7 +47,7 @@ jobs:
         with:
           app-name: ${{ matrix.app_name }}
           package: .deploy/bot-package
-          scm-do-build-during-deployment: true
+          scm-do-build-during-deployment: false
           track-status: false
       - name: Verify bot health endpoint
         shell: bash
