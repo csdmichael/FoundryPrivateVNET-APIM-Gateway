@@ -43,6 +43,7 @@ jobs:
           cp api/startup.sh .deploy/api-package/startup.sh
           cp requirements-api.txt .deploy/api-package/requirements.txt
           cp -R config .deploy/api-package/
+          cp -R Agent-Packages .deploy/api-package/
           find .deploy/api-package -type d -name '__pycache__' -prune -exec rm -rf {} +
           cd .deploy/api-package && zip -qr ../api-package.zip . && cd ..
 

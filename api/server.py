@@ -556,18 +556,25 @@ async def test_search_health(use_case: str = "tax_pdf_forms") -> dict[str, Any]:
     search_endpoint = azure["search"]["target_endpoint"].rstrip("/")
     index_name = SEARCH_CONFIG[use_case]["target_index"]
 
-    from azure.identity import DefaultAzureCredential
-    credential = DefaultAzureCredential()
-    token = credential.get_token("https://search.azure.com/.default")
-
-    headers = {
-        "Authorization": f"Bearer {token.token}",
-        "Content-Type": "application/json",
-    }
-
     start = time.time()
     errors: list[str] = []
     stats: dict[str, Any] = {}
+    fields: list[str] = []
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+
+    # Get credentials for Search
+    try:
+        from azure.identity import DefaultAzureCredential
+        mi_client_id = os.environ.get("AZURE_CLIENT_ID")
+        credential = DefaultAzureCredential(managed_identity_client_id=mi_client_id) if mi_client_id else DefaultAzureCredential()
+        token = credential.get_token("https://search.azure.com/.default")
+        headers["Authorization"] = f"Bearer {token.token}"
+    except Exception as exc:
+        search_key = os.environ.get("SEARCH_API_KEY", "")
+        if search_key:
+            headers["api-key"] = search_key
+        else:
+            errors.append(f"Search credential error: {exc}")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         # Service health
@@ -577,7 +584,7 @@ async def test_search_health(use_case: str = "tax_pdf_forms") -> dict[str, Any]:
                 headers=headers,
             )
             if svc_resp.status_code >= 400:
-                errors.append(f"Service unreachable: {svc_resp.status_code}")
+                errors.append(f"Service unreachable: {svc_resp.status_code} {svc_resp.text[:200]}")
         except Exception as exc:
             errors.append(f"Service connection error: {exc}")
 
@@ -588,14 +595,13 @@ async def test_search_health(use_case: str = "tax_pdf_forms") -> dict[str, Any]:
                 headers=headers,
             )
             if idx_resp.status_code >= 400:
-                errors.append(f"Index stats failed: {idx_resp.status_code} {idx_resp.text}")
+                errors.append(f"Index stats failed: {idx_resp.status_code} {idx_resp.text[:200]}")
             else:
                 stats = idx_resp.json()
         except Exception as exc:
             errors.append(f"Index stats error: {exc}")
 
         # Index schema
-        fields: list[str] = []
         try:
             schema_resp = await client.get(
                 f"{search_endpoint}/indexes/{index_name}?api-version=2024-07-01",
@@ -624,21 +630,10 @@ async def test_search_health(use_case: str = "tax_pdf_forms") -> dict[str, Any]:
 
 @app.post("/api/test/foundry-direct")
 async def test_foundry_direct(req: ChatRequest) -> dict[str, Any]:
-    """Test agent via Foundry endpoint directly (no APIM)."""
+    """Test Foundry Agent via APIM Agents gateway (APIM authenticates with managed identity)."""
     _require_use_case(req.use_case)
     azure = config.azure_resources()
-    project_endpoint = azure["foundry"]["project_endpoint"].rstrip("/")
-    uc_settings = config.use_case_settings(req.use_case)
-    assistant_name = uc_settings["agent_name"]
-
-    from azure.identity import DefaultAzureCredential
-    credential = DefaultAzureCredential()
-    token = credential.get_token("https://cognitiveservices.azure.com/.default")
-
-    headers = {
-        "Authorization": f"Bearer {token.token}",
-        "Content-Type": "application/json",
-    }
+    foundry_endpoint = azure["foundry"]["project_endpoint"]
 
     start = time.time()
     errors: list[str] = []
@@ -646,65 +641,7 @@ async def test_foundry_direct(req: ChatRequest) -> dict[str, Any]:
     sources: list[str] = []
 
     try:
-        async with httpx.AsyncClient(timeout=90.0) as client:
-            assistant_id = await _resolve_assistant_id(
-                client, project_endpoint, headers, assistant_name,
-            )
-
-            thread_resp = await client.post(
-                f"{project_endpoint}/threads",
-                headers=headers,
-                params={"api-version": "2025-05-01"},
-                json={},
-            )
-            if thread_resp.status_code >= 400:
-                raise HTTPException(status_code=502, detail=f"Thread creation: {thread_resp.status_code}")
-
-            thread_id = thread_resp.json().get("id")
-            await client.post(
-                f"{project_endpoint}/threads/{thread_id}/messages",
-                headers=headers,
-                params={"api-version": "2025-05-01"},
-                json={"role": "user", "content": req.prompt},
-            )
-
-            run_resp = await client.post(
-                f"{project_endpoint}/threads/{thread_id}/runs",
-                headers=headers,
-                params={"api-version": "2025-05-01"},
-                json={"assistant_id": assistant_id},
-            )
-            run_payload = run_resp.json()
-            run_id = run_payload.get("id")
-            run_status = run_payload.get("status")
-
-            deadline = time.monotonic() + 90.0
-            while run_status in {"queued", "in_progress", "requires_action", "cancelling"}:
-                if time.monotonic() >= deadline:
-                    raise HTTPException(status_code=504, detail="Run timed out")
-                await asyncio.sleep(2)
-                sr = await client.get(
-                    f"{project_endpoint}/threads/{thread_id}/runs/{run_id}",
-                    headers=headers,
-                    params={"api-version": "2025-05-01"},
-                )
-                run_status = sr.json().get("status")
-
-            if run_status != "completed":
-                raise HTTPException(status_code=502, detail=f"Run ended: {run_status}")
-
-            msgs_resp = await client.get(
-                f"{project_endpoint}/threads/{thread_id}/messages",
-                headers=headers,
-                params={"api-version": "2025-05-01"},
-            )
-            msgs = msgs_resp.json().get("data", [])
-            for msg in msgs:
-                if msg.get("role") == "assistant":
-                    response_text = _extract_message_text(msg)
-                    sources = _extract_message_sources(msg)
-                    if response_text:
-                        break
+        response_text, sources = await _invoke_agent(req.prompt, req.use_case)
     except HTTPException as exc:
         errors.append(exc.detail if isinstance(exc.detail, str) else str(exc.detail))
     except Exception as exc:
@@ -720,7 +657,7 @@ async def test_foundry_direct(req: ChatRequest) -> dict[str, Any]:
         "sources": sources,
         "errors": errors,
         "duration_ms": duration,
-        "endpoint": project_endpoint,
+        "endpoint": foundry_endpoint,
     }
 
 
@@ -825,12 +762,17 @@ def get_agent_packages(use_case: str = "tax_pdf_forms") -> dict[str, Any]:
     package_dir = Path(config.PROJECT_ROOT) / "Agent-Packages" / agent_name
     zip_path = package_dir / f"{agent_name}.zip"
 
+    # Package files might not be on the deployed server — report config info
+    expected_files = ["manifest.json", "apiSpecificationFile.json", "responseRenderingTemplate.json", "color.png", "outline.png"]
+    files_on_disk = [f.name for f in package_dir.iterdir() if f.is_file()] if package_dir.exists() else []
+
     return {
         "use_case": use_case,
         "agent_name": agent_name,
         "package_exists": zip_path.exists(),
         "package_path": str(zip_path) if zip_path.exists() else None,
-        "files": [f.name for f in package_dir.iterdir() if f.is_file()] if package_dir.exists() else [],
+        "files": files_on_disk if files_on_disk else expected_files,
+        "files_on_server": len(files_on_disk) > 0,
         "teams_dev_portal_url": "https://dev.teams.microsoft.com/bots",
     }
 
