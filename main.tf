@@ -447,8 +447,7 @@ resource "azurerm_linux_web_app" "ui" {
   }
 
   app_settings = {
-    SCM_DO_BUILD_DURING_DEPLOYMENT = "true"
-    WEBSITE_RUN_FROM_PACKAGE       = "1"
+    SCM_DO_BUILD_DURING_DEPLOYMENT = "false"
     PORT                           = "8080"
     API_BASE_URL                   = "${data.azurerm_api_management.apim.gateway_url}/foundry-privatevnet-app/api"
   }
@@ -456,7 +455,7 @@ resource "azurerm_linux_web_app" "ui" {
   site_config {
     always_on  = true
     ftps_state = "Disabled"
-    app_command_line = "pm2 serve /home/site/wwwroot 8080 --no-daemon --spa"
+    app_command_line = "node server.js"
 
     application_stack {
       node_version = "20-lts"

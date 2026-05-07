@@ -42,6 +42,8 @@ jobs:
           cp -R ui/www .deploy/ui-package/
           cp ui/server.js .deploy/ui-package/
           cp ui/deploy-package.json .deploy/ui-package/package.json
+          cd .deploy/ui-package
+          npm install --production
 
       - uses: azure/login@v2
         with:
@@ -54,15 +56,14 @@ jobs:
         with:
           app-name: foundry-privatevnet-ui
           package: .deploy/ui-package
-          scm-do-build-during-deployment: true
           track-status: false
 
       - name: Verify health
         shell: bash
         run: |
-          max_attempts=6
-          delay=15
-          sleep 15
+          max_attempts=8
+          delay=20
+          sleep 30
           for attempt in $(seq 1 $max_attempts); do
             status=$(curl -s -o /dev/null -w "%{http_code}" https://foundry-privatevnet-ui.azurewebsites.net/)
             if [ "$status" -ge 200 ] && [ "$status" -lt 400 ]; then
