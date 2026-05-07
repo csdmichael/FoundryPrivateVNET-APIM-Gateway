@@ -47,7 +47,7 @@ jobs:
         with:
           app-name: ${{ matrix.app_name }}
           package: .deploy/bot-package
-          scm-do-build-during-deployment: false
+          scm-do-build-during-deployment: true
           track-status: false
       - name: Verify bot health endpoint
         shell: bash
