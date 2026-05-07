@@ -36,15 +36,13 @@ jobs:
           cache: 'npm'
           cache-dependency-path: ui/package-lock.json
 
-      - name: Install dependencies
+      - name: Install and build
         working-directory: ui
-        run: npm ci
+        run: |
+          npm ci
+          npm run build -- --configuration production
 
-      - name: Build production bundle
-        working-directory: ui
-        run: npm run build -- --configuration production
-
-      - name: Prepare deploy package
+      - name: Prepare deploy zip
         shell: bash
         run: |
           rm -rf .deploy/ui-package
@@ -53,7 +51,9 @@ jobs:
           cp ui/server.js .deploy/ui-package/
           cp ui/deploy-package.json .deploy/ui-package/package.json
           cd .deploy/ui-package
-          npm install --production
+          npm install --production --no-audit --no-fund
+          cd ..
+          cd ui-package && zip -qr ../ui-package.zip . && cd ..
 
       - uses: azure/login@v2
         with:
@@ -61,55 +61,45 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Configure App Service settings
+      - name: Configure and deploy
         shell: bash
         run: |
-          az webapp config appsettings set \
-            --name ${{ steps.config.outputs.ui_app_name }} \
-            --resource-group ${{ steps.config.outputs.resource_group }} \
-            --settings \
-              SCM_DO_BUILD_DURING_DEPLOYMENT=false \
-              PORT=8080 \
+          APP="${{ steps.config.outputs.ui_app_name }}"
+          RG="${{ steps.config.outputs.resource_group }}"
+
+          # Configure settings and deploy in parallel
+          az webapp config appsettings set --name "$APP" --resource-group "$RG" \
+            --settings SCM_DO_BUILD_DURING_DEPLOYMENT=false PORT=8080 \
               API_BASE_URL="${{ steps.config.outputs.api_base_url }}" \
-            --output none
+            --output none &
+          PID_SETTINGS=$!
 
-          az webapp config appsettings delete \
-            --name ${{ steps.config.outputs.ui_app_name }} \
-            --resource-group ${{ steps.config.outputs.resource_group }} \
-            --setting-names WEBSITE_RUN_FROM_PACKAGE \
-            --output none 2>/dev/null || true
+          az webapp config set --name "$APP" --resource-group "$RG" \
+            --startup-file "node server.js" --output none &
+          PID_CONFIG=$!
 
-          az webapp config set \
-            --name ${{ steps.config.outputs.ui_app_name }} \
-            --resource-group ${{ steps.config.outputs.resource_group }} \
-            --startup-file "node server.js" \
-            --output none
+          az webapp config appsettings delete --name "$APP" --resource-group "$RG" \
+            --setting-names WEBSITE_RUN_FROM_PACKAGE --output none 2>/dev/null &
+          PID_DELETE=$!
 
-      - name: Deploy to App Service
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ steps.config.outputs.ui_app_name }}
-          package: .deploy/ui-package
-          track-status: false
+          wait $PID_SETTINGS $PID_CONFIG
+          wait $PID_DELETE || true
 
-      - name: Restart App Service
-        shell: bash
-        run: |
-          az webapp restart \
-            --name ${{ steps.config.outputs.ui_app_name }} \
-            --resource-group ${{ steps.config.outputs.resource_group }}
+          # Deploy zip
+          az webapp deploy --name "$APP" --resource-group "$RG" \
+            --src-path .deploy/ui-package.zip --type zip --async true
 
       - name: Verify health
         shell: bash
         run: |
-          max_attempts=8
-          delay=20
-          sleep 30
+          max_attempts=6
+          delay=10
+          sleep 15
           for attempt in $(seq 1 $max_attempts); do
             status=$(curl -s -o /dev/null -w "%{http_code}" ${{ steps.config.outputs.ui_url }}/)
             if [ "$status" -ge 200 ] && [ "$status" -lt 400 ]; then
               echo "Health check passed (HTTP $status)"
-              break
+              exit 0
             fi
             if [ $attempt -lt $max_attempts ]; then
               echo "Health check failed HTTP $status (attempt $attempt/$max_attempts), retrying in ${delay}s..."
@@ -118,4 +108,5 @@ jobs:
               echo "Health check failed after $max_attempts attempts (HTTP $status)"
               exit 1
             fi
+          done
           done

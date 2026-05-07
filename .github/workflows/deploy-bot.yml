@@ -13,22 +13,24 @@ on:
 jobs:
   deploy-bot-function:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - app_name: func-fdryvnetgw-tax-bot-eastus
-          - app_name: func-fdryvnetgw-eng-bot-eastus
     permissions:
       id-token: write
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - name: Prepare clean bot deploy package
+
+      - name: Read config values
+        id: config
+        shell: bash
+        run: |
+          cfg="config/azure_resources.json"
+          echo "resource_group=$(jq -r '.resource_group' $cfg)" >> "$GITHUB_OUTPUT"
+          echo "tax_bot=$(jq -r '.use_cases.tax_pdf_forms.bot_function_app' $cfg)" >> "$GITHUB_OUTPUT"
+          echo "eng_bot=$(jq -r '.use_cases.eng_design_ppt.bot_function_app' $cfg)" >> "$GITHUB_OUTPUT"
+          echo "tax_bot_url=$(jq -r '.use_cases.tax_pdf_forms.bot_endpoint' $cfg)" >> "$GITHUB_OUTPUT"
+          echo "eng_bot_url=$(jq -r '.use_cases.eng_design_ppt.bot_endpoint' $cfg)" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare deploy zip (once)
         shell: bash
         run: |
           rm -rf .deploy/bot-package
@@ -41,30 +43,59 @@ jobs:
           cp -R bot-function/messages .deploy/bot-package/
           cp -R config .deploy/bot-package/
           find .deploy/bot-package -type d -name '__pycache__' -prune -exec rm -rf {} +
-          find .deploy/bot-package -type d -name '.python_packages' -prune -exec rm -rf {} +
-      - name: Deploy bot function
-        uses: azure/webapps-deploy@v3
+          cd .deploy/bot-package && zip -qr ../bot-package.zip . && cd ..
+
+      - uses: azure/login@v2
         with:
-          app-name: ${{ matrix.app_name }}
-          package: .deploy/bot-package
-          scm-do-build-during-deployment: true
-          track-status: false
-      - name: Verify bot health endpoint
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy both bots in parallel
         shell: bash
         run: |
-          max_attempts=6
-          delay=15
-          sleep 15
-          for attempt in $(seq 1 $max_attempts); do
-            if curl --fail --silent --show-error https://${{ matrix.app_name }}.azurewebsites.net/api/health; then
-              echo "Health check passed"
-              break
-            fi
-            if [ $attempt -lt $max_attempts ]; then
-              echo "Health check failed (attempt $attempt/$max_attempts), retrying in ${delay}s..."
-              sleep $delay
-            else
-              echo "Health check failed after $max_attempts attempts"
-              exit 1
-            fi
-          done
+          RG="${{ steps.config.outputs.resource_group }}"
+
+          az webapp deploy --name "${{ steps.config.outputs.tax_bot }}" --resource-group "$RG" \
+            --src-path .deploy/bot-package.zip --type zip --async true &
+          PID_TAX=$!
+
+          az webapp deploy --name "${{ steps.config.outputs.eng_bot }}" --resource-group "$RG" \
+            --src-path .deploy/bot-package.zip --type zip --async true &
+          PID_ENG=$!
+
+          wait $PID_TAX $PID_ENG
+          echo "Both bot deploys submitted"
+
+      - name: Verify both bot health endpoints
+        shell: bash
+        run: |
+          check_health() {
+            local url="$1/api/health"
+            local name="$2"
+            local max=5 delay=10
+            sleep 10
+            for attempt in $(seq 1 $max); do
+              if curl --fail --silent --show-error "$url"; then
+                echo "$name health check passed"
+                return 0
+              fi
+              if [ $attempt -lt $max ]; then
+                echo "$name health check failed (attempt $attempt/$max), retrying in ${delay}s..."
+                sleep $delay
+              else
+                echo "$name health check failed after $max attempts"
+                return 1
+              fi
+            done
+          }
+
+          check_health "${{ steps.config.outputs.tax_bot_url }}" "Tax bot" &
+          PID_TAX=$!
+          check_health "${{ steps.config.outputs.eng_bot_url }}" "Eng bot" &
+          PID_ENG=$!
+
+          FAILED=0
+          wait $PID_TAX || FAILED=1
+          wait $PID_ENG || FAILED=1
+          exit $FAILED
