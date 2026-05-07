@@ -17,10 +17,26 @@ az apim api import --resource-group $resourceGroup --service-name $apimName --pa
 az apim api update --resource-group $resourceGroup --service-name $apimName --api-id $apiId --subscription-required false | Out-Null
 
 $subscriptionId = $config.subscription_id
+$uiUrl = $config.app_services.ui_url
 $policyXml = @"
 <policies>
   <inbound>
     <base />
+    <cors allow-credentials="false">
+      <allowed-origins>
+        <origin>$uiUrl</origin>
+        <origin>http://localhost:4200</origin>
+      </allowed-origins>
+      <allowed-methods preflight-result-max-age="300">
+        <method>GET</method>
+        <method>POST</method>
+        <method>OPTIONS</method>
+      </allowed-methods>
+      <allowed-headers>
+        <header>Content-Type</header>
+        <header>Accept</header>
+      </allowed-headers>
+    </cors>
     <set-backend-service base-url="$backendUrl" />
   </inbound>
   <backend>
