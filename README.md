@@ -296,6 +296,64 @@ Each bot function receives messages from Teams, sets its use-case-specific routi
 
 All bot infrastructure (Function App, storage account, consumption plan, bot registration, Teams channel) is managed by Terraform and deployed automatically.
 
+### Bot endpoints and manual tests
+
+Use these endpoints to validate the deployed bot web apps:
+
+| Use case | Health endpoint | Bot Framework messaging endpoint |
+|----------|-----------------|----------------------------------|
+| Tax PDF Forms | `https://func-fdryvnetgw-tax-bot-eastus.azurewebsites.net/api/health` | `https://func-fdryvnetgw-tax-bot-eastus.azurewebsites.net/api/messages` |
+| Eng Design PPT | `https://func-fdryvnetgw-eng-bot-eastus.azurewebsites.net/api/health` | `https://func-fdryvnetgw-eng-bot-eastus.azurewebsites.net/api/messages` |
+
+The `/api/messages` endpoint is the Bot Framework webhook used by Teams and Azure Bot Service. It expects a signed Bot Framework activity, so it is not useful for anonymous smoke tests from PowerShell or `curl`. For manual verification, use `/api/health` to confirm the bot app is running and use the APIM chat API below to validate the same prompt-routing path the bot uses after it receives a Teams message.
+
+PowerShell health checks:
+
+```powershell
+Invoke-WebRequest https://func-fdryvnetgw-tax-bot-eastus.azurewebsites.net/api/health
+Invoke-WebRequest https://func-fdryvnetgw-eng-bot-eastus.azurewebsites.net/api/health
+```
+
+Sample APIM chat smoke tests using prompts from the sample prompt list:
+
+```powershell
+$taxBody = @{
+    prompt   = "In lq_tax_exemption_IN_001_yellow.pdf, what is the stated purpose of the Indiana tax exemption certificate and who is expected to use it?"
+    use_case = "tax_pdf_forms"
+} | ConvertTo-Json
+
+Invoke-RestMethod \
+    -Method Post \
+    -Uri "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/chat" \
+    -ContentType "application/json" \
+    -Body $taxBody
+
+$engBody = @{
+    prompt   = "In engineering_design_review_001.pptx, summarize the problem statement, project goal, and design scope described in the opening slides."
+    use_case = "eng_design_ppt"
+} | ConvertTo-Json
+
+Invoke-RestMethod \
+    -Method Post \
+    -Uri "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/chat" \
+    -ContentType "application/json" \
+    -Body $engBody
+```
+
+`curl` equivalents:
+
+```bash
+curl -X POST "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/chat" \
+    -H "Content-Type: application/json" \
+    -d '{"prompt":"In lq_tax_exemption_IN_001_yellow.pdf, what is the stated purpose of the Indiana tax exemption certificate and who is expected to use it?","use_case":"tax_pdf_forms"}'
+
+curl -X POST "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/chat" \
+    -H "Content-Type: application/json" \
+    -d '{"prompt":"In engineering_design_review_001.pptx, summarize the problem statement, project goal, and design scope described in the opening slides.","use_case":"eng_design_ppt"}'
+```
+
+Expected result: a JSON response shaped like `{"response":"...","use_case":"tax_pdf_forms"}` or `{"response":"...","use_case":"eng_design_ppt"}`.
+
 ### Bot app secrets
 
 The bot app passwords are stored as Terraform variables. Set them via environment variables:

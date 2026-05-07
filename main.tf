@@ -405,7 +405,8 @@ resource "azurerm_linux_web_app" "api" {
 
   app_settings = {
     SCM_DO_BUILD_DURING_DEPLOYMENT = "true"
-    WEBSITE_RUN_FROM_PACKAGE       = "1"
+    ENABLE_ORYX_BUILD              = "true"
+    WEBSITE_RUN_FROM_PACKAGE       = "0"
     APIM_GATEWAY_URL               = data.azurerm_api_management.apim.gateway_url
     APIM_SUBSCRIPTION_KEY          = ""
     ALLOWED_ORIGINS                = "https://${local.ui_web_app_name}.azurewebsites.net,http://localhost:4200"
@@ -416,7 +417,7 @@ resource "azurerm_linux_web_app" "api" {
     ftps_state        = "Disabled"
     health_check_path = "/api/health"
     health_check_eviction_time_in_min = 2
-    app_command_line  = "gunicorn --bind=0.0.0.0 --timeout 600 -k uvicorn.workers.UvicornWorker api.server:app"
+    app_command_line  = "/bin/bash -c 'if [ ! -f /home/site/deps/.ready ]; then rm -rf /home/site/deps; mkdir -p /home/site/deps; python -m pip install --no-cache-dir -r /home/site/wwwroot/requirements.txt -t /home/site/deps && touch /home/site/deps/.ready; fi; export PYTHONPATH=/home/site/deps:$PYTHONPATH; exec gunicorn --bind=0.0.0.0:$PORT --timeout 600 -k uvicorn.workers.UvicornWorker server:app'"
 
     application_stack {
       python_version = "3.11"
@@ -529,7 +530,7 @@ resource "azurerm_linux_web_app" "bot" {
     application_stack {
       python_version = "3.11"
     }
-    app_command_line = "gunicorn --bind=0.0.0.0 --timeout 600 -k aiohttp.GunicornWebWorker bot_app:app"
+      app_command_line = "gunicorn --bind=0.0.0.0:$PORT --timeout 600 -k aiohttp.GunicornWebWorker bot_app:app"
   }
 
   app_settings = {

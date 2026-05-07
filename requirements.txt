@@ -9,5 +9,6 @@ azure-ai-projects
 azure-cosmos
 azure-storage-blob
 fastapi
+httpx
 uvicorn
 gunicorn

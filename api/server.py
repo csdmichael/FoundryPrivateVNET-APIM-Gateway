@@ -2,9 +2,11 @@ import json
 import logging
 import os
 import time
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from uuid import uuid4
 
 import httpx
@@ -162,6 +164,92 @@ def _extract_response_text(payload: Any) -> str:
     return ""
 
 
+def _extract_message_text(message: dict[str, Any]) -> str:
+    content = message.get("content")
+    if not isinstance(content, list):
+        return ""
+
+    text_parts: list[str] = []
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        text = item.get("text")
+        if isinstance(text, dict):
+            value = text.get("value")
+            if isinstance(value, str) and value.strip():
+                text_parts.append(value.strip())
+    return "\n\n".join(text_parts)
+
+
+def _extract_message_sources(message: dict[str, Any]) -> list[str]:
+    sources: list[str] = []
+    content = message.get("content")
+    if not isinstance(content, list):
+        return sources
+
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        text = item.get("text")
+        if not isinstance(text, dict):
+            continue
+        annotations = text.get("annotations")
+        if not isinstance(annotations, list):
+            continue
+        for annotation in annotations:
+            if not isinstance(annotation, dict):
+                continue
+            file_citation = annotation.get("file_citation")
+            if isinstance(file_citation, dict):
+                quote = file_citation.get("quote")
+                if isinstance(quote, str) and quote.strip():
+                    sources.append(quote.strip())
+    return sources
+
+
+def _resolve_foundry_agents_project_path(project_endpoint: str) -> str:
+    parsed = urlparse(project_endpoint)
+    if not parsed.path:
+        raise HTTPException(status_code=500, detail="Foundry project endpoint is missing a path")
+
+    project_path = parsed.path.rstrip("/")
+    if not project_path.startswith("/api/projects/"):
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unsupported Foundry project endpoint path: {project_path}",
+        )
+    return f"/foundry-agents{project_path}"
+
+
+async def _resolve_assistant_id(
+    client: httpx.AsyncClient,
+    base_url: str,
+    headers: dict[str, str],
+    assistant_name: str,
+) -> str:
+    response = await client.get(
+        f"{base_url}/assistants",
+        headers=headers,
+        params={"api-version": "2025-05-01"},
+    )
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Assistant lookup failed: {response.status_code} {response.text}",
+        )
+
+    payload = response.json() if response.content else {}
+    assistants = payload.get("data", []) if isinstance(payload, dict) else []
+    if isinstance(assistants, list):
+        for assistant in assistants:
+            if isinstance(assistant, dict) and assistant.get("name") == assistant_name:
+                assistant_id = assistant.get("id")
+                if isinstance(assistant_id, str) and assistant_id:
+                    return assistant_id
+
+    raise HTTPException(status_code=502, detail=f"Assistant not found: {assistant_name}")
+
+
 async def _invoke_agent(prompt: str, use_case: str) -> tuple[str, list[str]]:
     use_case_settings = _require_use_case(use_case)
     azure_settings = config.azure_resources()
@@ -169,10 +257,11 @@ async def _invoke_agent(prompt: str, use_case: str) -> tuple[str, list[str]]:
 
     gateway_url = os.environ.get("APIM_GATEWAY_URL", apim["gateway_url"]).rstrip("/")
     subscription_key = os.environ.get("APIM_SUBSCRIPTION_KEY", "")
-    route_path = os.environ.get(
-        f"{use_case.upper()}_APIM_PATH",
-        use_case_settings["apim_agent_path"],
+    project_path = os.environ.get(
+        "FOUNDRY_AGENTS_API_PATH",
+        _resolve_foundry_agents_project_path(azure_settings["foundry"]["project_endpoint"]),
     )
+    assistant_name = os.environ.get(f"{use_case.upper()}_AGENT_NAME", use_case_settings["agent_name"])
 
     headers = {
         "Content-Type": "application/json",
@@ -181,39 +270,106 @@ async def _invoke_agent(prompt: str, use_case: str) -> tuple[str, list[str]]:
     if subscription_key:
         headers["Ocp-Apim-Subscription-Key"] = subscription_key
 
-    body = {
-        "prompt": prompt,
-        "messages": [{"role": "user", "content": prompt}],
-        "use_case": use_case,
-        "agentName": use_case_settings["agent_name"],
-        "foundryProjectEndpoint": azure_settings["foundry"]["project_endpoint"],
-    }
+    base_url = f"{gateway_url}{project_path.rstrip('/')}"
+    logger.info("Invoking agent for use_case=%s via %s", use_case, base_url)
 
-    logger.info("Invoking agent for use_case=%s via %s", use_case, route_path)
+    async with httpx.AsyncClient(timeout=90.0) as client:
+        assistant_id = await _resolve_assistant_id(client, base_url, headers, assistant_name)
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(f"{gateway_url}{route_path}", headers=headers, json=body)
-
-    if response.status_code >= 400:
-        logger.error(
-            "APIM request failed for use_case=%s status=%s body=%s",
-            use_case,
-            response.status_code,
-            response.text[:1000],
+        thread_response = await client.post(
+            f"{base_url}/threads",
+            headers=headers,
+            params={"api-version": "2025-05-01"},
+            json={},
         )
-        raise HTTPException(status_code=502, detail=f"APIM request failed: {response.status_code} {response.text}")
+        if thread_response.status_code >= 400:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Thread creation failed: {thread_response.status_code} {thread_response.text}",
+            )
+        thread_payload = thread_response.json() if thread_response.content else {}
+        thread_id = thread_payload.get("id") if isinstance(thread_payload, dict) else None
+        if not isinstance(thread_id, str) or not thread_id:
+            raise HTTPException(status_code=502, detail="Thread creation response did not include an id")
 
-    try:
-        payload = response.json() if response.content else {}
-    except ValueError as exc:
-        logger.exception("APIM returned non-JSON payload for use_case=%s", use_case)
-        raise HTTPException(status_code=502, detail=f"APIM response was not valid JSON: {exc}") from exc
+        message_response = await client.post(
+            f"{base_url}/threads/{thread_id}/messages",
+            headers=headers,
+            params={"api-version": "2025-05-01"},
+            json={"role": "user", "content": prompt},
+        )
+        if message_response.status_code >= 400:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Message creation failed: {message_response.status_code} {message_response.text}",
+            )
 
-    text = _extract_response_text(payload)
-    if not text:
-        logger.error("APIM response did not contain agent content for use_case=%s payload=%s", use_case, json.dumps(payload)[:1000])
-        raise HTTPException(status_code=502, detail="APIM response did not contain agent content")
-    return text, _extract_sources(payload)
+        run_response = await client.post(
+            f"{base_url}/threads/{thread_id}/runs",
+            headers=headers,
+            params={"api-version": "2025-05-01"},
+            json={"assistant_id": assistant_id},
+        )
+        if run_response.status_code >= 400:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Run creation failed: {run_response.status_code} {run_response.text}",
+            )
+        run_payload = run_response.json() if run_response.content else {}
+        run_id = run_payload.get("id") if isinstance(run_payload, dict) else None
+        if not isinstance(run_id, str) or not run_id:
+            raise HTTPException(status_code=502, detail="Run creation response did not include an id")
+
+        deadline = time.monotonic() + 90.0
+        run_status = run_payload.get("status") if isinstance(run_payload, dict) else None
+        while run_status in {"queued", "in_progress", "requires_action", "cancelling"}:
+            if time.monotonic() >= deadline:
+                raise HTTPException(status_code=504, detail=f"Run timed out for assistant {assistant_name}")
+            await asyncio.sleep(2)
+            status_response = await client.get(
+                f"{base_url}/threads/{thread_id}/runs/{run_id}",
+                headers=headers,
+                params={"api-version": "2025-05-01"},
+            )
+            if status_response.status_code >= 400:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"Run status check failed: {status_response.status_code} {status_response.text}",
+                )
+            status_payload = status_response.json() if status_response.content else {}
+            run_status = status_payload.get("status") if isinstance(status_payload, dict) else None
+
+        if run_status != "completed":
+            raise HTTPException(status_code=502, detail=f"Run ended with status: {run_status}")
+
+        messages_response = await client.get(
+            f"{base_url}/threads/{thread_id}/messages",
+            headers=headers,
+            params={"api-version": "2025-05-01"},
+        )
+
+    if messages_response.status_code >= 400:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Message retrieval failed: {messages_response.status_code} {messages_response.text}",
+        )
+
+    messages_payload = messages_response.json() if messages_response.content else {}
+    messages = messages_payload.get("data", []) if isinstance(messages_payload, dict) else []
+    if isinstance(messages, list):
+        for message in messages:
+            if not isinstance(message, dict) or message.get("role") != "assistant":
+                continue
+            text = _extract_message_text(message)
+            if text:
+                return text, _extract_message_sources(message)
+
+    logger.error(
+        "Assistant response did not contain message content for use_case=%s payload=%s",
+        use_case,
+        json.dumps(messages_payload)[:1000],
+    )
+    raise HTTPException(status_code=502, detail="Assistant response did not contain message content")
 
 
 def _build_chat_error_response(req: ChatRequest, started_at: float, exc: HTTPException) -> ChatResponse:

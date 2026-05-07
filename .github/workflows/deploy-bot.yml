@@ -28,20 +28,32 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - name: Prepare bot deploy package
-        run: cp -r config bot-function/config
+      - name: Prepare clean bot deploy package
+        shell: bash
+        run: |
+          rm -rf .deploy/bot-package
+          mkdir -p .deploy/bot-package
+          cp bot-function/bot_app.py .deploy/bot-package/
+          cp bot-function/host.json .deploy/bot-package/
+          cp bot-function/requirements.txt .deploy/bot-package/
+          cp -R bot-function/health .deploy/bot-package/
+          cp -R bot-function/messages .deploy/bot-package/
+          cp -R config .deploy/bot-package/
+          find .deploy/bot-package -type d -name '__pycache__' -prune -exec rm -rf {} +
+          find .deploy/bot-package -type d -name '.python_packages' -prune -exec rm -rf {} +
       - name: Deploy bot function
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ matrix.app_name }}
-          package: bot-function
+          package: .deploy/bot-package
           scm-do-build-during-deployment: true
+          track-status: false
       - name: Verify bot health endpoint
         shell: bash
         run: |
-          max_attempts=10
-          delay=30
-          sleep 30
+          max_attempts=6
+          delay=15
+          sleep 15
           for attempt in $(seq 1 $max_attempts); do
             if curl --fail --silent --show-error https://${{ matrix.app_name }}.azurewebsites.net/api/health; then
               echo "Health check passed"
