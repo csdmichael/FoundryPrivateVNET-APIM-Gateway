@@ -683,3 +683,10 @@ The Terraform implementation manages:
 - Optional App Service resources (API/UI) when `deploy_api`/`deploy_ui` are enabled
 
 Validate region, SKU, and existing resource assumptions in [main.tfvars.json](main.tfvars.json) before running apply in a different subscription or environment.
+
+## References
+
+- [Set up private networking for Foundry Agent Service (Microsoft Learn)](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/virtual-networks?tabs=portal) - Guidance for private networking with Bicep or Terraform, including private endpoints, DNS zones, and deny-by-default network rules.
+- [APIM and Foundry best practices](docs/best-practices.md) - Project-specific implementation guidance and operational recommendations.
+- [Demo walkthrough script](docs/demo-script.md) - End-to-end demo flow for validating the deployed architecture.
+- [Sample prompt catalog](docs/Prompts.txt) - Prompt set for repeatable smoke testing across use cases.
