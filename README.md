@@ -321,6 +321,35 @@ Each bot function receives messages from Teams, sets its use-case-specific routi
 
 All bot infrastructure (Function App, storage account, consumption plan, bot registration, Teams channel) is managed by Terraform and deployed automatically.
 
+### Entra app registration requirements
+
+Each bot uses an Entra (Azure AD) app registration for Bot Framework authentication. These registrations **must** be configured as follows:
+
+| Setting | Required value | Why |
+|---------|---------------|-----|
+| `signInAudience` | `AzureADMultipleOrgs` (multi-tenant) | Bot Framework Connector authenticates via `login.microsoftonline.com/botframework.com`. Single-tenant apps fail with `AADSTS700016: Application not found in directory 'Bot Framework'`. |
+| `MicrosoftAppId` | The Entra app's Application (client) ID | Set as an app setting on each bot Function App. |
+| `MicrosoftAppPassword` | A valid client secret for the Entra app | Set as an app setting. Secrets expire — check with `az ad app credential list --id <appId>`. |
+| `APIM_CHAT_URL` | `https://<apim-gateway>/foundry-privatevnet-app/chat` | The APIM endpoint the bot calls to get agent responses. |
+
+To fix a bot that receives messages but never replies, check:
+
+```powershell
+# Verify app registration is multi-tenant
+az ad app show --id <appId> --query signInAudience -o tsv
+# Should return: AzureADMultipleOrgs
+
+# Fix if single-tenant
+az ad app update --id <appId> --sign-in-audience AzureADMultipleOrgs
+
+# Verify secrets are not expired
+az ad app credential list --id <appId> --query "[].{hint:hint, endDate:endDateTime}" -o table
+
+# Verify APIM /chat path works
+$body = '{"prompt":"test","use_case":"tax_pdf_forms"}'
+Invoke-RestMethod -Uri "https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/chat" -Method Post -ContentType "application/json" -Body $body
+```
+
 ### Bot endpoints and manual tests
 
 Use these endpoints to validate the deployed bot web apps:
