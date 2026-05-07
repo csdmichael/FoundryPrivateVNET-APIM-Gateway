@@ -758,40 +758,61 @@ async def test_apim(req: ChatRequest) -> dict[str, Any]:
 
 @app.post("/api/test/bot-service")
 async def test_bot_service(req: ChatRequest) -> dict[str, Any]:
-    """Test Bot Service using the same prompt."""
+    """Test Bot Service: health-check the bot function app, then call APIM /chat (same path the bot uses)."""
     _require_use_case(req.use_case)
     azure = config.azure_resources()
+    uc_settings = azure["use_cases"][req.use_case]
+    bot_endpoint = uc_settings.get("bot_endpoint", "").rstrip("/")
+    apim_chat_url = config.apim_chat_url()
+
     start = time.time()
     errors: list[str] = []
     response_text = ""
-    bot_endpoint = azure["app_services"].get("api_url", "").rstrip("/")
+    sources: list[str] = []
+    bot_healthy = False
 
-    try:
-        async with httpx.AsyncClient(timeout=90.0) as client:
-            resp = await client.post(
-                f"{bot_endpoint}/chat",
-                json={"prompt": req.prompt, "use_case": req.use_case},
-            )
-            if resp.status_code >= 400:
-                errors.append(f"Bot service returned {resp.status_code}: {resp.text}")
+    async with httpx.AsyncClient(timeout=90.0) as client:
+        # Step 1: Health-check the bot function app
+        try:
+            health_resp = await client.get(f"{bot_endpoint}/api/health")
+            if health_resp.status_code == 200:
+                bot_healthy = True
             else:
-                payload = resp.json()
+                errors.append(f"Bot health check returned {health_resp.status_code}: {health_resp.text}")
+        except Exception as exc:
+            errors.append(f"Bot health check failed: {exc}")
+
+        # Step 2: Call APIM /chat (same endpoint the bot calls when it receives a Teams message)
+        try:
+            chat_resp = await client.post(
+                apim_chat_url,
+                json={"prompt": req.prompt, "use_case": req.use_case},
+                headers={"Content-Type": "application/json"},
+            )
+            if chat_resp.status_code == 200:
+                payload = chat_resp.json()
                 response_text = payload.get("response", "")
-                if payload.get("error"):
-                    errors.append(payload["error"])
-    except Exception as exc:
-        errors.append(str(exc))
+                sources = _extract_sources(payload)
+                if not response_text.strip():
+                    errors.append("APIM chat returned empty response")
+            else:
+                errors.append(f"APIM chat returned {chat_resp.status_code}: {chat_resp.text[:500]}")
+        except Exception as exc:
+            errors.append(f"APIM chat call failed: {exc}")
 
     duration = int((time.time() - start) * 1000)
-    ok = len(errors) == 0 and bool(response_text.strip())
+    ok = bot_healthy and len(errors) == 0 and bool(response_text.strip())
     return {
         "ok": ok,
         "use_case": req.use_case,
         "prompt": req.prompt,
         "response": response_text,
+        "sources": sources,
         "errors": errors,
         "duration_ms": duration,
-        "endpoint": bot_endpoint,
+        "bot_endpoint": bot_endpoint,
+        "bot_healthy": bot_healthy,
+        "apim_chat_url": apim_chat_url,
     }
 
 

@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { ApiService, SamplePrompt, TestAgentResult } from '../services/api.service';
+import { ApiService, SamplePrompt, BotTestResult } from '../services/api.service';
 import { UseCaseService } from '../services/use-case.service';
 import { DeviceService } from '../services/device.service';
 
@@ -13,7 +13,7 @@ import { DeviceService } from '../services/device.service';
 export class TestBotPage implements OnInit, OnDestroy {
   prompts: SamplePrompt[] = [];
   selectedPrompt = '';
-  result: TestAgentResult | null = null;
+  result: BotTestResult | null = null;
   loading = false;
   private sub?: Subscription;
 
@@ -52,7 +52,7 @@ export class TestBotPage implements OnInit, OnDestroy {
         this.result = {
           ok: false, use_case: this.uc.activeKey, prompt: this.selectedPrompt,
           response: '', sources: [], errors: [err.message || 'Request failed'],
-          duration_ms: 0, endpoint: '',
+          duration_ms: 0, bot_endpoint: '', bot_healthy: false, apim_chat_url: '',
         };
         this.loading = false;
       },

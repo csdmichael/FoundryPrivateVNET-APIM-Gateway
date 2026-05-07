@@ -102,6 +102,19 @@ export interface TestAgentResult {
   endpoint: string;
 }
 
+export interface BotTestResult {
+  ok: boolean;
+  use_case: string;
+  prompt: string;
+  response: string;
+  sources?: string[];
+  errors: string[];
+  duration_ms: number;
+  bot_endpoint: string;
+  bot_healthy: boolean;
+  apim_chat_url: string;
+}
+
 export interface AgentPackageInfo {
   use_case: string;
   agent_name: string;
@@ -189,8 +202,8 @@ export class ApiService {
     return this.http.post<TestAgentResult>(`${this.base}/test/apim`, { prompt, use_case: useCase });
   }
 
-  testBotService(prompt: string, useCase: string): Observable<TestAgentResult> {
-    return this.http.post<TestAgentResult>(`${this.base}/test/bot-service`, { prompt, use_case: useCase });
+  testBotService(prompt: string, useCase: string): Observable<BotTestResult> {
+    return this.http.post<BotTestResult>(`${this.base}/test/bot-service`, { prompt, use_case: useCase });
   }
 
   getAgentPackages(useCase: string): Observable<AgentPackageInfo> {

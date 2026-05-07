@@ -44,6 +44,8 @@
       "label": "Tax PDF Forms",
       "agent_name": "Tax-PDF-Forms-Agent",
       "apim_agent_path": "/foundry-privatevnet/agents/tax-pdf-forms/chat",
+      "bot_function_app": "func-fdryvnetgw-tax-bot-eastus",
+      "bot_endpoint": "https://func-fdryvnetgw-tax-bot-eastus.azurewebsites.net",
       "search_assets": {
         "data_source": "tax-pdf-forms-datasource",
         "index": "tax-pdf-forms-index",
@@ -54,6 +56,8 @@
       "label": "Engineering Design PPT",
       "agent_name": "Eng-Design-PPT-Agent",
       "apim_agent_path": "/foundry-privatevnet/agents/eng-design-ppt/chat",
+      "bot_function_app": "func-fdryvnetgw-eng-bot-eastus",
+      "bot_endpoint": "https://func-fdryvnetgw-eng-bot-eastus.azurewebsites.net",
       "search_assets": {
         "data_source": "eng-design-ppt-datasource",
         "index": "eng-design-ppt-index",
