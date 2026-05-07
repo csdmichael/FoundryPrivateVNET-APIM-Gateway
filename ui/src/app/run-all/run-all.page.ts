@@ -23,6 +23,7 @@ export interface StepResult {
   errors: string[];
   detail: any;
   _expanded?: boolean;
+  _copied?: boolean;
 }
 
 @Component({
@@ -39,6 +40,7 @@ export class RunAllPage implements OnInit, OnDestroy {
   completedCount = 0;
   passedCount = 0;
   failedCount = 0;
+  allCopied = false;
   private sub?: Subscription;
 
   constructor(
@@ -179,5 +181,26 @@ export class RunAllPage implements OnInit, OnDestroy {
       case 'running': return 'primary';
       default: return 'medium';
     }
+  }
+
+  copyStepErrors(step: StepResult, event: Event) {
+    event.stopPropagation();
+    const text = `[Step ${step.num}: ${step.title}]\n` + step.errors.join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+      step._copied = true;
+      setTimeout(() => step._copied = false, 2000);
+    });
+  }
+
+  copyAllErrors() {
+    const lines = this.steps
+      .filter(s => s.errors.length > 0)
+      .map(s => `[Step ${s.num}: ${s.title}] (${s.status === 'pass' ? 'PASS' : 'FAIL'}, ${s.durationMs ?? 0}ms)\n` + s.errors.join('\n'))
+      .join('\n\n');
+    const header = `Pipeline Test Report — ${this.uc.active.label}\nPassed: ${this.passedCount}/${this.steps.length} | Failed: ${this.failedCount} | Total: ${this.totalDurationMs}ms\n\n`;
+    navigator.clipboard.writeText(header + lines).then(() => {
+      this.allCopied = true;
+      setTimeout(() => this.allCopied = false, 2000);
+    });
   }
 }

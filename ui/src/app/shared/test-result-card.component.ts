@@ -25,7 +25,13 @@ import { Component, Input } from '@angular/core';
 
         <!-- Errors -->
         <div *ngIf="errors.length" class="errors-section">
-          <ion-text color="danger"><strong>Errors:</strong></ion-text>
+          <div class="errors-header">
+            <ion-text color="danger"><strong>Errors ({{ errors.length }}):</strong></ion-text>
+            <ion-button fill="clear" size="small" (click)="copyErrors($event)" class="copy-btn">
+              <ion-icon [name]="copied ? 'checkmark-outline' : 'copy-outline'" slot="start"></ion-icon>
+              {{ copied ? 'Copied' : 'Copy' }}
+            </ion-button>
+          </div>
           <ul>
             <li *ngFor="let e of errors" class="error-item">{{ e }}</li>
           </ul>
@@ -62,6 +68,17 @@ import { Component, Input } from '@angular/core';
       ul { margin: 4px 0 0; padding-left: 18px; }
       .error-item { font-size: 0.85rem; color: var(--ion-color-danger-shade); margin-bottom: 4px; }
     }
+    .errors-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .copy-btn {
+      --padding-start: 4px;
+      --padding-end: 4px;
+      font-size: 0.75rem;
+      height: 28px;
+    }
     .detail-row { font-size: 0.85rem; margin-bottom: 6px; code { font-size: 0.8rem; background: var(--ion-color-light); padding: 2px 6px; border-radius: 4px; } }
   `]
 })
@@ -73,4 +90,14 @@ export class TestResultCardComponent {
   @Input() endpoint = '';
 
   expanded = false;
+  copied = false;
+
+  copyErrors(event: Event) {
+    event.stopPropagation();
+    const text = `[${this.title}]\n` + this.errors.join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+      this.copied = true;
+      setTimeout(() => this.copied = false, 2000);
+    });
+  }
 }

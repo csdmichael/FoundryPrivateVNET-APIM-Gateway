@@ -35,6 +35,14 @@
       <app-kpi-badge [value]="completedCount + '/' + steps.length" label="Completed" color=""></app-kpi-badge>
     </div>
 
+    <!-- Copy All Errors button -->
+    <div *ngIf="failedCount > 0 && !running" class="copy-all-row">
+      <ion-button fill="outline" color="danger" size="small" (click)="copyAllErrors()">
+        <ion-icon [name]="allCopied ? 'checkmark-outline' : 'clipboard-outline'" slot="start"></ion-icon>
+        {{ allCopied ? 'Copied!' : 'Copy All Errors' }}
+      </ion-button>
+    </div>
+
     <!-- Progress bar -->
     <ion-progress-bar *ngIf="running" [value]="completedCount / steps.length" color="primary" class="progress"></ion-progress-bar>
 
@@ -59,7 +67,13 @@
         <ion-card-content *ngIf="step._expanded">
           <!-- Errors -->
           <div *ngIf="step.errors.length > 0" class="errors-block">
-            <ion-text color="danger"><strong>Errors ({{ step.errors.length }}):</strong></ion-text>
+            <div class="errors-block-header">
+              <ion-text color="danger"><strong>Errors ({{ step.errors.length }}):</strong></ion-text>
+              <ion-button fill="clear" size="small" color="danger" (click)="copyStepErrors(step, $event)" class="copy-btn">
+                <ion-icon [name]="step._copied ? 'checkmark-outline' : 'copy-outline'" slot="start"></ion-icon>
+                {{ step._copied ? 'Copied' : 'Copy' }}
+              </ion-button>
+            </div>
             <ul>
               <li *ngFor="let e of step.errors" class="error-item">{{ e }}</li>
             </ul>
