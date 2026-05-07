@@ -19,6 +19,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Read config values
+        id: config
+        shell: bash
+        run: |
+          cfg="config/azure_resources.json"
+          echo "resource_group=$(jq -r '.resource_group' $cfg)" >> "$GITHUB_OUTPUT"
+          echo "ui_app_name=$(jq -r '.app_services.ui_name' $cfg)" >> "$GITHUB_OUTPUT"
+          echo "ui_url=$(jq -r '.app_services.ui_url' $cfg)" >> "$GITHUB_OUTPUT"
+          echo "api_base_url=$(jq -r '"\(.apim.gateway_url)/\(.apim.api_path)/api"' $cfg)" >> "$GITHUB_OUTPUT"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -51,12 +61,43 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Configure App Service settings
+        shell: bash
+        run: |
+          az webapp config appsettings set \
+            --name ${{ steps.config.outputs.ui_app_name }} \
+            --resource-group ${{ steps.config.outputs.resource_group }} \
+            --settings \
+              SCM_DO_BUILD_DURING_DEPLOYMENT=false \
+              PORT=8080 \
+              API_BASE_URL="${{ steps.config.outputs.api_base_url }}" \
+            --output none
+
+          az webapp config appsettings delete \
+            --name ${{ steps.config.outputs.ui_app_name }} \
+            --resource-group ${{ steps.config.outputs.resource_group }} \
+            --setting-names WEBSITE_RUN_FROM_PACKAGE \
+            --output none 2>/dev/null || true
+
+          az webapp config set \
+            --name ${{ steps.config.outputs.ui_app_name }} \
+            --resource-group ${{ steps.config.outputs.resource_group }} \
+            --startup-file "node server.js" \
+            --output none
+
       - name: Deploy to App Service
         uses: azure/webapps-deploy@v3
         with:
-          app-name: foundry-privatevnet-ui
+          app-name: ${{ steps.config.outputs.ui_app_name }}
           package: .deploy/ui-package
           track-status: false
+
+      - name: Restart App Service
+        shell: bash
+        run: |
+          az webapp restart \
+            --name ${{ steps.config.outputs.ui_app_name }} \
+            --resource-group ${{ steps.config.outputs.resource_group }}
 
       - name: Verify health
         shell: bash
@@ -65,7 +106,7 @@ jobs:
           delay=20
           sleep 30
           for attempt in $(seq 1 $max_attempts); do
-            status=$(curl -s -o /dev/null -w "%{http_code}" https://foundry-privatevnet-ui.azurewebsites.net/)
+            status=$(curl -s -o /dev/null -w "%{http_code}" ${{ steps.config.outputs.ui_url }}/)
             if [ "$status" -ge 200 ] && [ "$status" -lt 400 ]; then
               echo "Health check passed (HTTP $status)"
               break
