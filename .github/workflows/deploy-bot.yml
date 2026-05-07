@@ -56,16 +56,35 @@ jobs:
         run: |
           RG="${{ steps.config.outputs.resource_group }}"
 
-          az webapp deploy --name "${{ steps.config.outputs.tax_bot }}" --resource-group "$RG" \
-            --src-path .deploy/bot-package.zip --type zip --async true &
+          deploy_with_retry() {
+            local name="$1" rg="$2" src="$3" max=4 delay=30
+            for attempt in $(seq 1 $max); do
+              if az webapp deploy --name "$name" --resource-group "$rg" \
+                   --src-path "$src" --type zip --timeout 300 2>&1; then
+                echo "$name deploy succeeded"
+                return 0
+              fi
+              if [ $attempt -lt $max ]; then
+                echo "$name deploy failed (attempt $attempt/$max), waiting ${delay}s for in-progress deployment..."
+                sleep $delay
+              else
+                echo "$name deploy failed after $max attempts"
+                return 1
+              fi
+            done
+          }
+
+          deploy_with_retry "${{ steps.config.outputs.tax_bot }}" "$RG" .deploy/bot-package.zip &
           PID_TAX=$!
 
-          az webapp deploy --name "${{ steps.config.outputs.eng_bot }}" --resource-group "$RG" \
-            --src-path .deploy/bot-package.zip --type zip --async true &
+          deploy_with_retry "${{ steps.config.outputs.eng_bot }}" "$RG" .deploy/bot-package.zip &
           PID_ENG=$!
 
-          wait $PID_TAX $PID_ENG
-          echo "Both bot deploys submitted"
+          FAILED=0
+          wait $PID_TAX || FAILED=1
+          wait $PID_ENG || FAILED=1
+          if [ $FAILED -ne 0 ]; then echo "One or both bot deploys failed"; exit 1; fi
+          echo "Both bot deploys completed"
 
       - name: Verify both bot health endpoints
         shell: bash
