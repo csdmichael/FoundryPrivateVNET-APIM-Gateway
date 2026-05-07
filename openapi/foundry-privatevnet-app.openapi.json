@@ -7,12 +7,12 @@
   },
   "servers": [
     {
-      "url": "https://apim-poc-my.azure-api.net/foundry-privatevnet-app/api",
+      "url": "https://apim-poc-my.azure-api.net/foundry-privatevnet-app",
       "description": "Derived from config/azure_resources.json: apim.gateway_url + apim.api_path"
     }
   ],
   "paths": {
-    "/health": {
+    "/api/health": {
       "get": {
         "operationId": "health",
         "responses": {
@@ -22,7 +22,7 @@
         }
       }
     },
-    "/prompts": {
+    "/api/prompts": {
       "get": {
         "operationId": "getPrompts",
         "parameters": [
@@ -43,7 +43,7 @@
         }
       }
     },
-    "/chat": {
+    "/api/chat": {
       "post": {
         "operationId": "chat",
         "requestBody": {
@@ -68,7 +68,7 @@
         }
       }
     },
-    "/batch": {
+    "/api/batch": {
       "post": {
         "operationId": "batch",
         "requestBody": {
@@ -96,7 +96,7 @@
         }
       }
     },
-    "/feedback": {
+    "/api/feedback": {
       "get": {
         "operationId": "getFeedback",
         "parameters": [
@@ -140,7 +140,7 @@
         }
       }
     },
-    "/documents": {
+    "/api/documents": {
       "get": {
         "operationId": "listDocuments",
         "parameters": [
@@ -156,6 +156,159 @@
         ],
         "responses": {
           "200": { "description": "Sample document list" }
+        }
+      }
+    },
+    "/api/test/search-health": {
+      "get": {
+        "operationId": "testSearchHealth",
+        "parameters": [
+          {
+            "name": "use_case",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["tax_pdf_forms", "eng_design_ppt"]
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "AI Search health check result" }
+        }
+      }
+    },
+    "/api/test/foundry-direct": {
+      "post": {
+        "operationId": "testFoundryDirect",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["prompt", "use_case"],
+                "properties": {
+                  "prompt": { "type": "string" },
+                  "use_case": { "type": "string", "enum": ["tax_pdf_forms", "eng_design_ppt"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Foundry direct test result" }
+        }
+      }
+    },
+    "/api/test/apim": {
+      "post": {
+        "operationId": "testApim",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["prompt", "use_case"],
+                "properties": {
+                  "prompt": { "type": "string" },
+                  "use_case": { "type": "string", "enum": ["tax_pdf_forms", "eng_design_ppt"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "APIM gateway test result" }
+        }
+      }
+    },
+    "/api/test/bot-service": {
+      "post": {
+        "operationId": "testBotService",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["prompt", "use_case"],
+                "properties": {
+                  "prompt": { "type": "string" },
+                  "use_case": { "type": "string", "enum": ["tax_pdf_forms", "eng_design_ppt"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Bot service test result" }
+        }
+      }
+    },
+    "/api/test/agent-packages": {
+      "get": {
+        "operationId": "getAgentPackages",
+        "parameters": [
+          {
+            "name": "use_case",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["tax_pdf_forms", "eng_design_ppt"]
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Agent package info" }
+        }
+      }
+    },
+    "/api/test/agent-packages/build": {
+      "post": {
+        "operationId": "buildAgentPackage",
+        "parameters": [
+          {
+            "name": "use_case",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["tax_pdf_forms", "eng_design_ppt"]
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Agent package build result" }
+        }
+      }
+    },
+    "/api/test/agent-packages/download": {
+      "get": {
+        "operationId": "downloadAgentPackage",
+        "parameters": [
+          {
+            "name": "use_case",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["tax_pdf_forms", "eng_design_ppt"]
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Agent package zip download" }
+        }
+      }
+    },
+    "/api/config/azure-resources": {
+      "get": {
+        "operationId": "getAzureResourcesConfig",
+        "responses": {
+          "200": { "description": "Sanitised Azure resource config" }
         }
       }
     }

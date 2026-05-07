@@ -539,3 +539,361 @@ def list_documents(use_case: str = "tax_pdf_forms") -> dict[str, Any]:
         "total": len(documents),
         "documents": documents,
     }
+
+
+# ---------------------------------------------------------------------------
+# Test-runner endpoints for the troubleshooting UI
+# ---------------------------------------------------------------------------
+
+SEARCH_CONFIG = config.search_config()["use_cases"]
+
+
+@app.get("/api/test/search-health")
+async def test_search_health(use_case: str = "tax_pdf_forms") -> dict[str, Any]:
+    """Health-check AI Search: verify index exists and return doc count / field stats."""
+    _require_use_case(use_case)
+    azure = config.azure_resources()
+    search_endpoint = azure["search"]["target_endpoint"].rstrip("/")
+    index_name = SEARCH_CONFIG[use_case]["target_index"]
+
+    from azure.identity import DefaultAzureCredential
+    credential = DefaultAzureCredential()
+    token = credential.get_token("https://search.azure.com/.default")
+
+    headers = {
+        "Authorization": f"Bearer {token.token}",
+        "Content-Type": "application/json",
+    }
+
+    start = time.time()
+    errors: list[str] = []
+    stats: dict[str, Any] = {}
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Service health
+        try:
+            svc_resp = await client.get(
+                f"{search_endpoint}/indexes?api-version=2024-07-01&$select=name",
+                headers=headers,
+            )
+            if svc_resp.status_code >= 400:
+                errors.append(f"Service unreachable: {svc_resp.status_code}")
+        except Exception as exc:
+            errors.append(f"Service connection error: {exc}")
+
+        # Index stats
+        try:
+            idx_resp = await client.get(
+                f"{search_endpoint}/indexes/{index_name}/stats?api-version=2024-07-01",
+                headers=headers,
+            )
+            if idx_resp.status_code >= 400:
+                errors.append(f"Index stats failed: {idx_resp.status_code} {idx_resp.text}")
+            else:
+                stats = idx_resp.json()
+        except Exception as exc:
+            errors.append(f"Index stats error: {exc}")
+
+        # Index schema
+        fields: list[str] = []
+        try:
+            schema_resp = await client.get(
+                f"{search_endpoint}/indexes/{index_name}?api-version=2024-07-01",
+                headers=headers,
+            )
+            if schema_resp.status_code < 400:
+                schema = schema_resp.json()
+                fields = [f["name"] for f in schema.get("fields", [])]
+        except Exception:
+            pass
+
+    duration = int((time.time() - start) * 1000)
+    ok = len(errors) == 0
+    return {
+        "ok": ok,
+        "use_case": use_case,
+        "index_name": index_name,
+        "search_endpoint": search_endpoint,
+        "document_count": stats.get("documentCount", 0),
+        "storage_size_bytes": stats.get("storageSize", 0),
+        "fields": fields,
+        "errors": errors,
+        "duration_ms": duration,
+    }
+
+
+@app.post("/api/test/foundry-direct")
+async def test_foundry_direct(req: ChatRequest) -> dict[str, Any]:
+    """Test agent via Foundry endpoint directly (no APIM)."""
+    _require_use_case(req.use_case)
+    azure = config.azure_resources()
+    project_endpoint = azure["foundry"]["project_endpoint"].rstrip("/")
+    uc_settings = config.use_case_settings(req.use_case)
+    assistant_name = uc_settings["agent_name"]
+
+    from azure.identity import DefaultAzureCredential
+    credential = DefaultAzureCredential()
+    token = credential.get_token("https://cognitiveservices.azure.com/.default")
+
+    headers = {
+        "Authorization": f"Bearer {token.token}",
+        "Content-Type": "application/json",
+    }
+
+    start = time.time()
+    errors: list[str] = []
+    response_text = ""
+    sources: list[str] = []
+
+    try:
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            assistant_id = await _resolve_assistant_id(
+                client, project_endpoint, headers, assistant_name,
+            )
+
+            thread_resp = await client.post(
+                f"{project_endpoint}/threads",
+                headers=headers,
+                params={"api-version": "2025-05-01"},
+                json={},
+            )
+            if thread_resp.status_code >= 400:
+                raise HTTPException(status_code=502, detail=f"Thread creation: {thread_resp.status_code}")
+
+            thread_id = thread_resp.json().get("id")
+            await client.post(
+                f"{project_endpoint}/threads/{thread_id}/messages",
+                headers=headers,
+                params={"api-version": "2025-05-01"},
+                json={"role": "user", "content": req.prompt},
+            )
+
+            run_resp = await client.post(
+                f"{project_endpoint}/threads/{thread_id}/runs",
+                headers=headers,
+                params={"api-version": "2025-05-01"},
+                json={"assistant_id": assistant_id},
+            )
+            run_payload = run_resp.json()
+            run_id = run_payload.get("id")
+            run_status = run_payload.get("status")
+
+            deadline = time.monotonic() + 90.0
+            while run_status in {"queued", "in_progress", "requires_action", "cancelling"}:
+                if time.monotonic() >= deadline:
+                    raise HTTPException(status_code=504, detail="Run timed out")
+                await asyncio.sleep(2)
+                sr = await client.get(
+                    f"{project_endpoint}/threads/{thread_id}/runs/{run_id}",
+                    headers=headers,
+                    params={"api-version": "2025-05-01"},
+                )
+                run_status = sr.json().get("status")
+
+            if run_status != "completed":
+                raise HTTPException(status_code=502, detail=f"Run ended: {run_status}")
+
+            msgs_resp = await client.get(
+                f"{project_endpoint}/threads/{thread_id}/messages",
+                headers=headers,
+                params={"api-version": "2025-05-01"},
+            )
+            msgs = msgs_resp.json().get("data", [])
+            for msg in msgs:
+                if msg.get("role") == "assistant":
+                    response_text = _extract_message_text(msg)
+                    sources = _extract_message_sources(msg)
+                    if response_text:
+                        break
+    except HTTPException as exc:
+        errors.append(exc.detail if isinstance(exc.detail, str) else str(exc.detail))
+    except Exception as exc:
+        errors.append(str(exc))
+
+    duration = int((time.time() - start) * 1000)
+    ok = len(errors) == 0 and bool(response_text.strip())
+    return {
+        "ok": ok,
+        "use_case": req.use_case,
+        "prompt": req.prompt,
+        "response": response_text,
+        "sources": sources,
+        "errors": errors,
+        "duration_ms": duration,
+        "endpoint": project_endpoint,
+    }
+
+
+@app.post("/api/test/apim")
+async def test_apim(req: ChatRequest) -> dict[str, Any]:
+    """Test agent via APIM gateway."""
+    _require_use_case(req.use_case)
+    start = time.time()
+    errors: list[str] = []
+    response_text = ""
+    sources: list[str] = []
+    azure = config.azure_resources()
+    gateway_url = azure["apim"]["gateway_url"]
+
+    try:
+        response_text, sources = await _invoke_agent(req.prompt, req.use_case)
+    except HTTPException as exc:
+        errors.append(exc.detail if isinstance(exc.detail, str) else str(exc.detail))
+    except Exception as exc:
+        errors.append(str(exc))
+
+    duration = int((time.time() - start) * 1000)
+    ok = len(errors) == 0 and bool(response_text.strip())
+    return {
+        "ok": ok,
+        "use_case": req.use_case,
+        "prompt": req.prompt,
+        "response": response_text,
+        "sources": sources,
+        "errors": errors,
+        "duration_ms": duration,
+        "endpoint": gateway_url,
+    }
+
+
+@app.post("/api/test/bot-service")
+async def test_bot_service(req: ChatRequest) -> dict[str, Any]:
+    """Test Bot Service: health-check the bot function app, then call APIM /chat (same path the bot uses)."""
+    _require_use_case(req.use_case)
+    azure = config.azure_resources()
+    uc_settings = azure["use_cases"][req.use_case]
+    bot_endpoint = uc_settings.get("bot_endpoint", "").rstrip("/")
+    apim_chat_url = config.apim_chat_url()
+
+    start = time.time()
+    errors: list[str] = []
+    response_text = ""
+    sources: list[str] = []
+    bot_healthy = False
+
+    async with httpx.AsyncClient(timeout=90.0) as client:
+        # Step 1: Health-check the bot function app
+        try:
+            health_resp = await client.get(f"{bot_endpoint}/api/health")
+            if health_resp.status_code == 200:
+                bot_healthy = True
+            else:
+                errors.append(f"Bot health check returned {health_resp.status_code}: {health_resp.text}")
+        except Exception as exc:
+            errors.append(f"Bot health check failed: {exc}")
+
+        # Step 2: Call APIM /chat (same endpoint the bot calls when it receives a Teams message)
+        try:
+            chat_resp = await client.post(
+                apim_chat_url,
+                json={"prompt": req.prompt, "use_case": req.use_case},
+                headers={"Content-Type": "application/json"},
+            )
+            if chat_resp.status_code == 200:
+                payload = chat_resp.json()
+                response_text = payload.get("response", "")
+                sources = _extract_sources(payload)
+                if not response_text.strip():
+                    errors.append("APIM chat returned empty response")
+            else:
+                errors.append(f"APIM chat returned {chat_resp.status_code}: {chat_resp.text[:500]}")
+        except Exception as exc:
+            errors.append(f"APIM chat call failed: {exc}")
+
+    duration = int((time.time() - start) * 1000)
+    ok = bot_healthy and len(errors) == 0 and bool(response_text.strip())
+    return {
+        "ok": ok,
+        "use_case": req.use_case,
+        "prompt": req.prompt,
+        "response": response_text,
+        "sources": sources,
+        "errors": errors,
+        "duration_ms": duration,
+        "bot_endpoint": bot_endpoint,
+        "bot_healthy": bot_healthy,
+        "apim_chat_url": apim_chat_url,
+    }
+
+
+@app.get("/api/test/agent-packages")
+def get_agent_packages(use_case: str = "tax_pdf_forms") -> dict[str, Any]:
+    """List available agent packages for download."""
+    _require_use_case(use_case)
+    uc_settings = config.use_case_settings(use_case)
+    agent_name = uc_settings["agent_name"]
+    package_dir = Path(config.PROJECT_ROOT) / "Agent-Packages" / agent_name
+    zip_path = package_dir / f"{agent_name}.zip"
+
+    return {
+        "use_case": use_case,
+        "agent_name": agent_name,
+        "package_exists": zip_path.exists(),
+        "package_path": str(zip_path) if zip_path.exists() else None,
+        "files": [f.name for f in package_dir.iterdir() if f.is_file()] if package_dir.exists() else [],
+        "teams_dev_portal_url": "https://dev.teams.microsoft.com/bots",
+    }
+
+
+@app.post("/api/test/agent-packages/build")
+def build_agent_package(use_case: str = "tax_pdf_forms") -> dict[str, Any]:
+    """Build (zip) the agent package for a use case."""
+    import zipfile
+
+    _require_use_case(use_case)
+    uc_settings = config.use_case_settings(use_case)
+    agent_name = uc_settings["agent_name"]
+    package_dir = Path(config.PROJECT_ROOT) / "Agent-Packages" / agent_name
+    zip_path = package_dir / f"{agent_name}.zip"
+
+    required_files = ["manifest.json", "apiSpecificationFile.json", "responseRenderingTemplate.json"]
+    optional_files = ["color.png", "outline.png"]
+    missing = [f for f in required_files if not (package_dir / f).exists()]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Missing package files: {missing}")
+
+    files_to_zip = required_files + [f for f in optional_files if (package_dir / f).exists()]
+
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for fname in files_to_zip:
+            zf.write(package_dir / fname, fname)
+
+    return {
+        "ok": True,
+        "agent_name": agent_name,
+        "zip_path": str(zip_path),
+        "files_included": files_to_zip,
+    }
+
+
+@app.get("/api/test/agent-packages/download")
+def download_agent_package(use_case: str = "tax_pdf_forms"):
+    """Download the agent package zip."""
+    from fastapi.responses import FileResponse
+
+    _require_use_case(use_case)
+    uc_settings = config.use_case_settings(use_case)
+    agent_name = uc_settings["agent_name"]
+    zip_path = Path(config.PROJECT_ROOT) / "Agent-Packages" / agent_name / f"{agent_name}.zip"
+
+    if not zip_path.exists():
+        raise HTTPException(status_code=404, detail="Package not built yet. Call /api/test/agent-packages/build first.")
+
+    return FileResponse(
+        str(zip_path),
+        media_type="application/zip",
+        filename=f"{agent_name}.zip",
+    )
+
+
+@app.get("/api/config/azure-resources")
+def get_azure_resources_config() -> dict[str, Any]:
+    """Return sanitised azure resource config for UI display."""
+    azure = config.azure_resources()
+    return {
+        "apim_gateway_url": azure["apim"]["gateway_url"],
+        "search_endpoint": azure["search"]["target_endpoint"],
+        "foundry_endpoint": azure["foundry"]["project_endpoint"],
+        "bot_endpoint": azure["app_services"]["api_url"],
+        "ui_url": azure["app_services"]["ui_url"],
+    }

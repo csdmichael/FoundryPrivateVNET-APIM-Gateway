@@ -649,13 +649,14 @@ GitHub environments are not required by the current workflow set. Authentication
 Current workflow split:
 
 - `deploy-infra.yml` for Terraform and resource import changes
+- `deploy-api.yml` for the API backend (deploys to `foundry-privatevnet-api` App Service, re-imports OpenAPI spec into APIM)
 - `deploy-bot.yml` for the bot function apps (matrix deploys to both `func-fdryvnetgw-tax-bot-eastus` and `func-fdryvnetgw-eng-bot-eastus`)
 - `deploy-ui.yml` for the testing UI (builds Angular production bundle, deploys to `foundry-privatevnet-ui` App Service)
 - `configure-platform.yml` for APIM and Foundry AI gateway configuration
 - `provision-search-agents.yml` for two-phase Search asset provisioning followed by Foundry agent provisioning
 - `package-teams-agents.yml` for Teams package zips
 
-The API deployment workflow is currently disabled. The UI workflow triggers on pushes to `main` that change files under `ui/` or `config/`.
+The API workflow triggers on pushes to `main` that change files under `api/`, `config/`, `openapi/`, or `requirements-api.txt`. After deploying the API, it automatically re-imports the OpenAPI spec into APIM.
 
 Pushes to `main` trigger only the workflows whose path filters match the changed component. Changes limited to `README.md` or files under `docs/` do not trigger any deployment workflow.
 
@@ -669,7 +670,7 @@ Recommended operator flow:
 Notes:
 
 - The workflows still use a single Terraform configuration and a branch-scoped OIDC credential for `main`.
-- The API GitHub Actions deployment is currently disabled. The UI workflow (`deploy-ui.yml`) is active and triggers on `ui/**` and `config/**` changes.
+- The API GitHub Actions deployment (`deploy-api.yml`) is active and triggers on `api/**`, `config/**`, `openapi/**`, and `requirements-api.txt` changes. After deploying, it re-imports the OpenAPI spec into APIM.
 - Docs-only updates are ignored by deployment workflows.
 - Agent provisioning requires the current deployment principal to have `Azure AI User` on the target Foundry account. In CI, the provisioning workflow treats that as a prerequisite and does not attempt self-assignment. For local privileged runs, set `AUTO_ASSIGN_FOUNDRY_ROLE=true` to let the script try the role assignment automatically.
 - The `provision-search-agents.yml` workflow runs Search provisioning first and agent provisioning second. If Foundry RBAC is missing, Search assets are still refreshed and the workflow writes the exact remediation command to the GitHub job summary instead of failing the whole run.
