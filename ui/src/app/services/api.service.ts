@@ -10,6 +10,9 @@ export interface ChatResponse {
   duration_ms: number;
   sources: string[];
   attempts: number;
+  ok?: boolean;
+  error?: string;
+  trace_id?: string;
 }
 
 export interface BatchResultItem {
@@ -74,6 +77,55 @@ export interface DocumentDetail {
   content: any;
 }
 
+// --- Test runner interfaces ---
+
+export interface SearchHealthResult {
+  ok: boolean;
+  use_case: string;
+  index_name: string;
+  search_endpoint: string;
+  document_count: number;
+  storage_size_bytes: number;
+  fields: string[];
+  errors: string[];
+  duration_ms: number;
+}
+
+export interface TestAgentResult {
+  ok: boolean;
+  use_case: string;
+  prompt: string;
+  response: string;
+  sources?: string[];
+  errors: string[];
+  duration_ms: number;
+  endpoint: string;
+}
+
+export interface AgentPackageInfo {
+  use_case: string;
+  agent_name: string;
+  package_exists: boolean;
+  package_path: string | null;
+  files: string[];
+  teams_dev_portal_url: string;
+}
+
+export interface AgentPackageBuildResult {
+  ok: boolean;
+  agent_name: string;
+  zip_path: string;
+  files_included: string[];
+}
+
+export interface AzureResourcesConfig {
+  apim_gateway_url: string;
+  search_endpoint: string;
+  foundry_endpoint: string;
+  bot_endpoint: string;
+  ui_url: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private base = environment.apiUrl;
@@ -121,5 +173,39 @@ export class ApiService {
 
   getPdfUrl(docId: string, useCase: string): string {
     return this.getDocumentFileUrl(docId, useCase);
+  }
+
+  // --- Test runner methods ---
+
+  testSearchHealth(useCase: string): Observable<SearchHealthResult> {
+    return this.http.get<SearchHealthResult>(`${this.base}/test/search-health`, { params: { use_case: useCase } });
+  }
+
+  testFoundryDirect(prompt: string, useCase: string): Observable<TestAgentResult> {
+    return this.http.post<TestAgentResult>(`${this.base}/test/foundry-direct`, { prompt, use_case: useCase });
+  }
+
+  testApim(prompt: string, useCase: string): Observable<TestAgentResult> {
+    return this.http.post<TestAgentResult>(`${this.base}/test/apim`, { prompt, use_case: useCase });
+  }
+
+  testBotService(prompt: string, useCase: string): Observable<TestAgentResult> {
+    return this.http.post<TestAgentResult>(`${this.base}/test/bot-service`, { prompt, use_case: useCase });
+  }
+
+  getAgentPackages(useCase: string): Observable<AgentPackageInfo> {
+    return this.http.get<AgentPackageInfo>(`${this.base}/test/agent-packages`, { params: { use_case: useCase } });
+  }
+
+  buildAgentPackage(useCase: string): Observable<AgentPackageBuildResult> {
+    return this.http.post<AgentPackageBuildResult>(`${this.base}/test/agent-packages/build`, null, { params: { use_case: useCase } });
+  }
+
+  getAgentPackageDownloadUrl(useCase: string): string {
+    return `${this.base}/test/agent-packages/download?use_case=${useCase}`;
+  }
+
+  getAzureResourcesConfig(): Observable<AzureResourcesConfig> {
+    return this.http.get<AzureResourcesConfig>(`${this.base}/config/azure-resources`);
   }
 }

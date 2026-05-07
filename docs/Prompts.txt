@@ -25,3 +25,20 @@ Engineering Design PPT
 8. What implementation milestones, owners, or next steps are listed in solution_architecture_update_002.pptx?
 9. Where do the decks mention performance, scalability, resiliency, or operational monitoring requirements?
 10. Compare engineering_design_review_001.pptx with solution_architecture_update_002.pptx: what stayed the same, and what changed in the proposed architecture?
+
+UI
+===
+Build a UI in Ionic, Angular, Typescript that has a separate layout to render in high quality for each device type (Web versus mobile versus tablet)
+The UI will allow user to run multiple test scenarios sequentially following the data flow from AI Search to Foundry Agent to APIM to Bot service
+In header, Choose a use case between Tax Forms and Eng PPT Docs at session level. Make default is tax forms
+The input for sequential test case is to choose from one of sample prompts based on use case. The sample prompts are the ones from config json file under config folder
+The following test cases wil run:
+- Health check ai search and provide stats on ai search for this use case
+- Test agent using selected prompt based on use case by calling foundry endpoint directly
+- Test agent using selected prompt based on use case by calling APIM endpoint
+- Test Bot service based on use case using same prompt
+- Provide a page to package and download the agent to be imported in Teams dev portal and provide link to teams dev portal next to download
+In each test case show detailed result with error messages in master - detailed format and KPI per test case.
+The goal is to troubleshoot the data flow of this application from start to end.
+In home page, explain the purpose of UI and steps to do.
+In header of UI, add Microsoft logo in top right and in footer add: Copyright to Michael Yaacoub @ Microsoft | LinkedIn: https://www.linkedin.com/in/michael-yaacoub-7a46436 | GitHub:  https://github.com/csdmichael

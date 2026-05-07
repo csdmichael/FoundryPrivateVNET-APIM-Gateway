@@ -1,20 +1,54 @@
-<ion-header [translucent]="true">
-  <ion-toolbar>
-    <ion-title>
-      Blank
-    </ion-title>
-  </ion-toolbar>
-</ion-header>
-
-<ion-content [fullscreen]="true">
-  <ion-header collapse="condense">
-    <ion-toolbar>
-      <ion-title size="large">Blank</ion-title>
-    </ion-toolbar>
-  </ion-header>
-
-  <div id="container">
-    <strong>Ready to create an app?</strong>
-    <p>Start with Ionic <a target="_blank" rel="noopener noreferrer" href="https://ionicframework.com/docs/components">UI Components</a></p>
+<ion-content [fullscreen]="true" class="ion-padding">
+  <!-- Hero section -->
+  <div class="hero" [class.hero-desktop]="device.isDesktop" [class.hero-tablet]="device.isTablet">
+    <ion-icon name="git-network-outline" class="hero-icon"></ion-icon>
+    <h1>Foundry Private VNET &middot; Pipeline Tester</h1>
+    <p class="hero-subtitle">
+      End-to-end troubleshooting tool for the data flow:
+      <strong>AI Search &rarr; Foundry Agent &rarr; APIM Gateway &rarr; Bot Service &rarr; Teams</strong>
+    </p>
+    <p class="hero-desc">
+      Select a <strong>use case</strong> from the header (default: Tax PDF Forms), pick a sample prompt,
+      then run each test step sequentially to pinpoint where the pipeline succeeds or fails.
+    </p>
   </div>
+
+  <!-- Use-case badge -->
+  <ion-chip color="primary" class="uc-badge">
+    <ion-icon name="briefcase-outline"></ion-icon>
+    <ion-label>Active: {{ ucService.active.label }}</ion-label>
+  </ion-chip>
+
+  <!-- Steps grid -->
+  <div class="steps-grid" [class.steps-desktop]="device.isDesktop" [class.steps-tablet]="device.isTablet">
+    <ion-card *ngFor="let s of steps" [routerLink]="s.route" class="step-card" button>
+      <ion-card-header>
+        <div class="step-num">{{ s.num }}</div>
+        <ion-icon [name]="s.icon" class="step-icon"></ion-icon>
+        <ion-card-title>{{ s.title }}</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        {{ s.desc }}
+      </ion-card-content>
+    </ion-card>
+  </div>
+
+  <!-- Quick-start section -->
+  <ion-card class="quickstart-card">
+    <ion-card-header>
+      <ion-card-title>
+        <ion-icon name="rocket-outline"></ion-icon> Quick Start
+      </ion-card-title>
+    </ion-card-header>
+    <ion-card-content>
+      <ol>
+        <li>Choose your <strong>use case</strong> (Tax Forms or Eng PPT Docs) from the dropdown in the header.</li>
+        <li>Navigate to <strong>Step 1 &ndash; AI Search Health</strong> to verify the search index is healthy.</li>
+        <li>Proceed to <strong>Step 2</strong>, select a sample prompt, and test the Foundry Agent directly.</li>
+        <li>Continue through <strong>Steps 3 &amp; 4</strong> using the same prompt to verify APIM and Bot Service.</li>
+        <li>In <strong>Step 5</strong>, build &amp; download the agent package for Teams Developer Portal import.</li>
+      </ol>
+      <p>Each step shows KPIs (response time, status, error details) in a master-detail layout.</p>
+    </ion-card-content>
+  </ion-card>
 </ion-content>

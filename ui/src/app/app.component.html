@@ -4,14 +4,51 @@
     <ion-menu contentId="main-content" type="overlay">
       <ion-header>
         <ion-toolbar color="primary">
-          <ion-buttons slot="start">
-            <img src="https://img.icons8.com/color/28/microsoft.png" alt="Microsoft" style="margin-left:8px">
-          </ion-buttons>
-          <ion-title>AI Search POC</ion-title>
+          <ion-title>Pipeline Tester</ion-title>
         </ion-toolbar>
       </ion-header>
       <ion-content>
-        <ion-list-header>Navigation</ion-list-header>
+        <ion-list-header>Test Pipeline</ion-list-header>
+        <ion-list lines="none">
+          <ion-menu-toggle auto-hide="false">
+            <ion-item routerLink="/home" routerLinkActive="selected-nav" routerDirection="root" button detail="false">
+              <ion-icon name="home-outline" slot="start"></ion-icon>
+              <ion-label>Home</ion-label>
+            </ion-item>
+          </ion-menu-toggle>
+          <ion-menu-toggle auto-hide="false">
+            <ion-item routerLink="/test-search" routerLinkActive="selected-nav" routerDirection="root" button detail="false">
+              <ion-icon name="search-outline" slot="start"></ion-icon>
+              <ion-label>1. AI Search Health</ion-label>
+            </ion-item>
+          </ion-menu-toggle>
+          <ion-menu-toggle auto-hide="false">
+            <ion-item routerLink="/test-foundry" routerLinkActive="selected-nav" routerDirection="root" button detail="false">
+              <ion-icon name="flash-outline" slot="start"></ion-icon>
+              <ion-label>2. Foundry Agent</ion-label>
+            </ion-item>
+          </ion-menu-toggle>
+          <ion-menu-toggle auto-hide="false">
+            <ion-item routerLink="/test-apim" routerLinkActive="selected-nav" routerDirection="root" button detail="false">
+              <ion-icon name="cloud-outline" slot="start"></ion-icon>
+              <ion-label>3. APIM Gateway</ion-label>
+            </ion-item>
+          </ion-menu-toggle>
+          <ion-menu-toggle auto-hide="false">
+            <ion-item routerLink="/test-bot" routerLinkActive="selected-nav" routerDirection="root" button detail="false">
+              <ion-icon name="chatbubbles-outline" slot="start"></ion-icon>
+              <ion-label>4. Bot Service</ion-label>
+            </ion-item>
+          </ion-menu-toggle>
+          <ion-menu-toggle auto-hide="false">
+            <ion-item routerLink="/agent-package" routerLinkActive="selected-nav" routerDirection="root" button detail="false">
+              <ion-icon name="download-outline" slot="start"></ion-icon>
+              <ion-label>5. Agent Package</ion-label>
+            </ion-item>
+          </ion-menu-toggle>
+        </ion-list>
+
+        <ion-list-header>Other</ion-list-header>
         <ion-list lines="none">
           <ion-menu-toggle auto-hide="false">
             <ion-item routerLink="/chat" routerLinkActive="selected-nav" routerDirection="root" button detail="false">
@@ -35,12 +72,11 @@
 
         <!-- Footer in menu -->
         <div class="menu-footer">
-          <p>&copy; 2026 Michael Yaacoub</p>
-          <p>Sr Solution Engineer, Microsoft</p>
+          <p>&copy; 2026 Michael Yaacoub &#64; Microsoft</p>
           <p>
-            <a href="https://www.github.com/csdmichael" target="_blank" rel="noopener">GitHub</a>
+            <a href="https://www.linkedin.com/in/michael-yaacoub-7a46436" target="_blank" rel="noopener">LinkedIn</a>
             &middot;
-            <a href="https://www.linkedin.com/in/michael-yaacoub-7a46436/" target="_blank" rel="noopener">LinkedIn</a>
+            <a href="https://github.com/csdmichael" target="_blank" rel="noopener">GitHub</a>
           </p>
         </div>
       </ion-content>
@@ -53,7 +89,7 @@
           <ion-buttons slot="start">
             <ion-menu-button></ion-menu-button>
           </ion-buttons>
-          <ion-title>AI Search POC</ion-title>
+          <ion-title>Foundry Private VNET &middot; Pipeline Tester</ion-title>
           <ion-select slot="end" class="uc-select"
                       [value]="ucService.activeKey"
                       (ionChange)="onUseCaseChange($any($event).detail.value)"
@@ -62,9 +98,22 @@
               {{ uc.label }}
             </ion-select-option>
           </ion-select>
+          <ion-buttons slot="end">
+            <img src="https://img.icons8.com/color/36/microsoft.png" alt="Microsoft" class="ms-logo">
+          </ion-buttons>
         </ion-toolbar>
       </ion-header>
       <ion-router-outlet></ion-router-outlet>
+      <ion-footer class="copyright-bar">
+        <ion-toolbar color="light">
+          <ion-title size="small">
+            &copy; Michael Yaacoub &#64; Microsoft &nbsp;|&nbsp;
+            <a href="https://www.linkedin.com/in/michael-yaacoub-7a46436" target="_blank" rel="noopener">LinkedIn</a>
+            &nbsp;|&nbsp;
+            <a href="https://github.com/csdmichael" target="_blank" rel="noopener">GitHub</a>
+          </ion-title>
+        </ion-toolbar>
+      </ion-footer>
     </div>
   </ion-split-pane>
 </ion-app>

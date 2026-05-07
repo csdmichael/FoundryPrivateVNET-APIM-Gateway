@@ -1,0 +1,96 @@
+<ion-content class="ion-padding">
+  <div class="page-container" [class.desktop]="device.isDesktop" [class.tablet]="device.isTablet">
+    <h2><ion-icon name="download-outline"></ion-icon> Step 5: Agent Package</h2>
+    <p class="page-desc">Build, download, and import the <strong>{{ uc.active.label }}</strong> agent package into the Teams Developer Portal.</p>
+
+    <!-- Loading state -->
+    <div *ngIf="loadingInfo" class="empty-state">
+      <ion-spinner name="crescent"></ion-spinner>
+      <p>Loading package info...</p>
+    </div>
+
+    <!-- Error -->
+    <ion-card *ngIf="error" color="danger">
+      <ion-card-content>{{ error }}</ion-card-content>
+    </ion-card>
+
+    <!-- Package info -->
+    <div *ngIf="info && !loadingInfo">
+      <ion-card>
+        <ion-card-header>
+          <ion-card-title>
+            <ion-icon name="cube-outline"></ion-icon> {{ info.agent_name }}
+          </ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <div class="kpi-row">
+            <app-kpi-badge [value]="info.files.length" label="Files" color=""></app-kpi-badge>
+            <app-kpi-badge [value]="info.package_exists ? 'Yes' : 'No'" label="Package Built"
+              [color]="info.package_exists ? 'success' : 'warning'"></app-kpi-badge>
+          </div>
+
+          <!-- File list -->
+          <div class="file-list">
+            <strong>Package Files:</strong>
+            <ion-list lines="none">
+              <ion-item *ngFor="let f of info.files">
+                <ion-icon name="document-outline" slot="start" color="medium"></ion-icon>
+                <ion-label>{{ f }}</ion-label>
+              </ion-item>
+            </ion-list>
+          </div>
+
+          <!-- Actions -->
+          <div class="action-row">
+            <ion-button (click)="build()" [disabled]="building" color="primary">
+              <ion-spinner *ngIf="building" name="crescent" slot="start"></ion-spinner>
+              <ion-icon name="hammer-outline" slot="start" *ngIf="!building"></ion-icon>
+              {{ building ? 'Building...' : 'Build Package' }}
+            </ion-button>
+
+            <ion-button (click)="download()" [disabled]="!info.package_exists" color="success">
+              <ion-icon name="download-outline" slot="start"></ion-icon>
+              Download .zip
+            </ion-button>
+
+            <ion-button [href]="info.teams_dev_portal_url" target="_blank" fill="outline" color="primary">
+              <ion-icon name="open-outline" slot="start"></ion-icon>
+              Teams Dev Portal
+            </ion-button>
+          </div>
+
+          <!-- Build result -->
+          <ion-card *ngIf="buildResult" class="build-result" color="light">
+            <ion-card-header>
+              <ion-card-title>
+                <ion-icon name="checkmark-circle" color="success"></ion-icon> Package Built
+              </ion-card-title>
+            </ion-card-header>
+            <ion-card-content>
+              <div class="detail-row"><strong>Files included:</strong> {{ buildResult.files_included.join(', ') }}</div>
+            </ion-card-content>
+          </ion-card>
+        </ion-card-content>
+      </ion-card>
+
+      <!-- Instructions card -->
+      <ion-card class="instructions-card">
+        <ion-card-header>
+          <ion-card-title>
+            <ion-icon name="information-circle-outline"></ion-icon> Import Instructions
+          </ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <ol>
+            <li>Click <strong>Build Package</strong> to create the .zip archive.</li>
+            <li>Click <strong>Download .zip</strong> to save the package locally.</li>
+            <li>Open the <strong>Teams Developer Portal</strong> link above.</li>
+            <li>Go to <strong>Apps &rarr; Import an existing app</strong>.</li>
+            <li>Upload the downloaded .zip file.</li>
+            <li>Configure any remaining settings (bot ID, messaging endpoint) and publish.</li>
+          </ol>
+        </ion-card-content>
+      </ion-card>
+    </div>
+  </div>
+</ion-content>

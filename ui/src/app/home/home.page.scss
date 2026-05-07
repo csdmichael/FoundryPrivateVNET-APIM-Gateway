@@ -1,11 +1,131 @@
-#container {
+.hero {
   text-align: center;
+  padding: 24px 16px 16px;
 
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  .hero-icon {
+    font-size: 56px;
+    color: var(--ion-color-primary);
+    margin-bottom: 8px;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0 0 8px;
+  }
+
+  .hero-subtitle {
+    font-size: 0.95rem;
+    color: var(--ion-color-dark);
+    margin-bottom: 8px;
+  }
+
+  .hero-desc {
+    font-size: 0.85rem;
+    color: var(--ion-color-medium);
+    max-width: 640px;
+    margin: 0 auto;
+  }
+}
+.hero-desktop {
+  padding: 40px 24px 24px;
+  h1 { font-size: 2rem; }
+  .hero-subtitle { font-size: 1.1rem; }
+}
+.hero-tablet {
+  padding: 32px 20px 20px;
+  h1 { font-size: 1.75rem; }
+}
+
+.uc-badge {
+  display: block;
+  text-align: center;
+  margin: 0 auto 16px;
+}
+
+.steps-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding: 0 8px;
+}
+.steps-tablet {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  padding: 0 16px;
+}
+.steps-desktop {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  padding: 0 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.step-card {
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  }
+
+  ion-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .step-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--ion-color-primary);
+    color: #fff;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+  }
+
+  .step-icon {
+    font-size: 24px;
+    color: var(--ion-color-primary);
+    flex-shrink: 0;
+  }
+
+  ion-card-title {
+    font-size: 1rem;
+    flex: 1;
+  }
+
+  ion-card-content {
+    font-size: 0.85rem;
+    color: var(--ion-color-medium-shade);
+  }
+}
+
+.quickstart-card {
+  max-width: 800px;
+  margin: 24px auto;
+
+  ion-card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  ol {
+    padding-left: 20px;
+    li {
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+    }
+  }
 }
 
 #container strong {

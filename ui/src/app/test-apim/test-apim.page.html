@@ -1,0 +1,45 @@
+<ion-content class="ion-padding">
+  <div class="page-container" [class.desktop]="device.isDesktop" [class.tablet]="device.isTablet">
+    <h2><ion-icon name="cloud-outline"></ion-icon> Step 3: APIM Gateway</h2>
+    <p class="page-desc">Route the prompt through Azure API Management to confirm the gateway proxies correctly to the Foundry Agent for <strong>{{ uc.active.label }}</strong>.</p>
+
+    <!-- Prompt selector -->
+    <ion-item class="prompt-select">
+      <ion-label position="stacked">Sample Prompt</ion-label>
+      <ion-select [(ngModel)]="selectedPrompt" interface="action-sheet" placeholder="Choose a prompt...">
+        <ion-select-option *ngFor="let p of prompts" [value]="p.text">
+          [{{ p.category }}] {{ p.text | slice:0:80 }}{{ p.text.length > 80 ? '...' : '' }}
+        </ion-select-option>
+      </ion-select>
+    </ion-item>
+
+    <ion-button (click)="run()" [disabled]="loading || !selectedPrompt" expand="block" class="run-btn">
+      <ion-spinner *ngIf="loading" name="crescent" slot="start"></ion-spinner>
+      {{ loading ? 'Testing...' : 'Test APIM Gateway' }}
+    </ion-button>
+
+    <div *ngIf="result">
+      <app-test-result-card
+        title="APIM Gateway Response"
+        [ok]="result.ok"
+        [durationMs]="result.duration_ms"
+        [errors]="result.errors"
+        [endpoint]="result.endpoint">
+
+        <div class="prompt-display"><strong>Prompt:</strong> {{ result.prompt }}</div>
+
+        <div *ngIf="result.response" class="response-section">{{ result.response }}</div>
+
+        <div *ngIf="result.sources?.length" class="sources-section">
+          <strong>Sources:</strong>
+          <ion-chip *ngFor="let s of result.sources" color="tertiary" outline>{{ s | slice:0:60 }}</ion-chip>
+        </div>
+      </app-test-result-card>
+    </div>
+
+    <div *ngIf="!result && !loading" class="empty-state">
+      <ion-icon name="cloud-outline"></ion-icon>
+      <p>Select a prompt and click <strong>Test APIM Gateway</strong>.</p>
+    </div>
+  </div>
+</ion-content>

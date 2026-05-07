@@ -1,0 +1,43 @@
+@use '../test-common';
+
+.file-list {
+  margin-bottom: 16px;
+  strong { font-size: 0.85rem; }
+  ion-item {
+    --min-height: 36px;
+    font-size: 0.85rem;
+  }
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.build-result {
+  margin-top: 12px;
+  ion-card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1rem;
+  }
+}
+
+.instructions-card {
+  margin-top: 16px;
+  ion-card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  ol {
+    padding-left: 20px;
+    li {
+      margin-bottom: 8px;
+      font-size: 0.9rem;
+    }
+  }
+}

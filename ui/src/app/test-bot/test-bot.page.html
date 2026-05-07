@@ -1,0 +1,40 @@
+<ion-content class="ion-padding">
+  <div class="page-container" [class.desktop]="device.isDesktop" [class.tablet]="device.isTablet">
+    <h2><ion-icon name="chatbubbles-outline"></ion-icon> Step 4: Bot Service</h2>
+    <p class="page-desc">Send the prompt to the Bot Service API to validate the full Teams-compatible chat pipeline for <strong>{{ uc.active.label }}</strong>.</p>
+
+    <!-- Prompt selector -->
+    <ion-item class="prompt-select">
+      <ion-label position="stacked">Sample Prompt</ion-label>
+      <ion-select [(ngModel)]="selectedPrompt" interface="action-sheet" placeholder="Choose a prompt...">
+        <ion-select-option *ngFor="let p of prompts" [value]="p.text">
+          [{{ p.category }}] {{ p.text | slice:0:80 }}{{ p.text.length > 80 ? '...' : '' }}
+        </ion-select-option>
+      </ion-select>
+    </ion-item>
+
+    <ion-button (click)="run()" [disabled]="loading || !selectedPrompt" expand="block" class="run-btn">
+      <ion-spinner *ngIf="loading" name="crescent" slot="start"></ion-spinner>
+      {{ loading ? 'Testing...' : 'Test Bot Service' }}
+    </ion-button>
+
+    <div *ngIf="result">
+      <app-test-result-card
+        title="Bot Service Response"
+        [ok]="result.ok"
+        [durationMs]="result.duration_ms"
+        [errors]="result.errors"
+        [endpoint]="result.endpoint">
+
+        <div class="prompt-display"><strong>Prompt:</strong> {{ result.prompt }}</div>
+
+        <div *ngIf="result.response" class="response-section">{{ result.response }}</div>
+      </app-test-result-card>
+    </div>
+
+    <div *ngIf="!result && !loading" class="empty-state">
+      <ion-icon name="chatbubbles-outline"></ion-icon>
+      <p>Select a prompt and click <strong>Test Bot Service</strong>.</p>
+    </div>
+  </div>
+</ion-content>

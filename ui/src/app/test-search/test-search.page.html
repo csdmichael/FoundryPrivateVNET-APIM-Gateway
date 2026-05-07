@@ -1,0 +1,47 @@
+<ion-content class="ion-padding">
+  <div class="page-container" [class.desktop]="device.isDesktop" [class.tablet]="device.isTablet">
+    <h2><ion-icon name="search-outline"></ion-icon> Step 1: AI Search Health Check</h2>
+    <p class="page-desc">Verify Azure AI Search service connectivity, index existence, document count, and field schema for the <strong>{{ uc.active.label }}</strong> use case.</p>
+
+    <ion-button (click)="run()" [disabled]="loading" expand="block" class="run-btn">
+      <ion-spinner *ngIf="loading" name="crescent" slot="start"></ion-spinner>
+      {{ loading ? 'Checking...' : 'Run Health Check' }}
+    </ion-button>
+
+    <div *ngIf="result">
+      <app-test-result-card
+        title="AI Search Service"
+        [ok]="result.ok"
+        [durationMs]="result.duration_ms"
+        [errors]="result.errors"
+        [endpoint]="result.search_endpoint">
+
+        <!-- KPIs -->
+        <div class="kpi-row">
+          <app-kpi-badge [value]="result.document_count" label="Documents" [color]="result.document_count > 0 ? 'success' : 'danger'"></app-kpi-badge>
+          <app-kpi-badge [value]="formatBytes(result.storage_size_bytes)" label="Storage" color=""></app-kpi-badge>
+          <app-kpi-badge [value]="result.fields.length" label="Fields" color=""></app-kpi-badge>
+        </div>
+
+        <!-- Detail section -->
+        <div class="detail-section">
+          <div class="detail-row"><strong>Index Name:</strong> <code>{{ result.index_name }}</code></div>
+          <div class="detail-row"><strong>Use Case:</strong> {{ result.use_case }}</div>
+        </div>
+
+        <!-- Fields list -->
+        <div *ngIf="result.fields.length" class="fields-section">
+          <strong>Index Fields:</strong>
+          <div class="fields-grid" [class.fields-desktop]="device.isDesktop">
+            <ion-chip *ngFor="let f of result.fields" color="tertiary" outline>{{ f }}</ion-chip>
+          </div>
+        </div>
+      </app-test-result-card>
+    </div>
+
+    <div *ngIf="!result && !loading" class="empty-state">
+      <ion-icon name="analytics-outline"></ion-icon>
+      <p>Click <strong>Run Health Check</strong> to begin.</p>
+    </div>
+  </div>
+</ion-content>
