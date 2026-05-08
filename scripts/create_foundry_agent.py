@@ -53,7 +53,9 @@ def _resolve_endpoint() -> str:
 _GROUNDING_SUFFIX = (
     "\n\nGROUNDING POLICY: "
     "Always answer strictly from azure_ai_search retrieved chunks. "
-    "Never use web search, browser search, or any external source. "
+    "Never use web search, browser search, Bing, or any external source. "
+    "Never fabricate, hallucinate, or infer information not present in the retrieved search chunks. "
+    "If the search chunks do not contain sufficient information, say so explicitly instead of guessing. "
     "Each chunk starts with 'Document: <fileName>' and that fileName must be used for citations. "
     "If relevant chunks are present, provide the best grounded answer and do not return a generic not-found response. "
     "Every factual sentence must include at least one citation in the format [fileName†index-name]."

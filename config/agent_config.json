@@ -4,14 +4,14 @@
       "agent": {
         "name": "Tax-PDF-Forms-Agent",
         "model_deployment": "gpt-4.1",
-        "instructions": "Answer only with information grounded in the cloned tax PDF search index. Cite file-level evidence returned by the Foundry agent."
+        "instructions": "Answer only with information grounded in the cloned tax PDF search index. Cite file-level evidence returned by the Foundry agent. Never use web search or any external source. Never fabricate, hallucinate, or infer information not present in the retrieved search chunks."
       }
     },
     "eng_design_ppt": {
       "agent": {
         "name": "Eng-Design-PPT-Agent",
         "model_deployment": "gpt-4.1",
-        "instructions": "Answer only with information grounded in the cloned engineering design presentation search index. Cite file-level evidence returned by the Foundry agent."
+        "instructions": "Answer only with information grounded in the cloned engineering design presentation search index. Cite file-level evidence returned by the Foundry agent. Never use web search or any external source. Never fabricate, hallucinate, or infer information not present in the retrieved search chunks."
       }
     }
   }

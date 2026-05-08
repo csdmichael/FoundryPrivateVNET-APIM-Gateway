@@ -4,12 +4,12 @@
       "keyword": [
         {"text": "Indiana expired exemption certificate", "category": "keyword"},
         {"text": "West Virginia resale documentation", "category": "keyword"},
-        {"text": "California 501(c)(3) eligibility", "category": "keyword"}
+{"text": "Indiana exemption certificate purchaser fields", "category": "keyword"}
       ],
       "semantic": [
         {"text": "What renewal process is described in the Indiana tax exemption form?", "category": "semantic"},
         {"text": "What documentation is required for a West Virginia resale certificate?", "category": "semantic"},
-        {"text": "What deadline is listed for the Alabama property tax exemption form?", "category": "semantic"}
+{"text": "What limitations or restrictions does the West Virginia resale certificate describe?", "category": "semantic"}
       ],
       "agent": [
         {"text": "In lq_tax_exemption_IN_001_yellow.pdf, what is the stated purpose of the Indiana tax exemption certificate and who is expected to use it?", "category": "agent"},
