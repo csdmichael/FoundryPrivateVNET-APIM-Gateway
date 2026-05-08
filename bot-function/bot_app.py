@@ -42,8 +42,13 @@ if not APIM_CHAT_URL:
 
 BOT_APP_ID = os.environ.get("MicrosoftAppId", "")
 BOT_APP_PASSWORD = os.environ.get("MicrosoftAppPassword", "")
+BOT_APP_TENANT_ID = os.environ.get("MicrosoftAppTenantId", "")
 
-_settings = BotFrameworkAdapterSettings(BOT_APP_ID, BOT_APP_PASSWORD)
+_settings = BotFrameworkAdapterSettings(
+    app_id=BOT_APP_ID,
+    app_password=BOT_APP_PASSWORD,
+    channel_auth_tenant=BOT_APP_TENANT_ID or None,
+)
 _adapter = BotFrameworkAdapter(_settings)
 
 logging.basicConfig(level=logging.INFO)
