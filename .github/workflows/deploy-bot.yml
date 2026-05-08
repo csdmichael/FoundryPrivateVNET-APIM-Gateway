@@ -37,10 +37,7 @@ jobs:
           mkdir -p .deploy/bot-package
           cp bot-function/bot_app.py .deploy/bot-package/
           cp bot-function/startup.sh .deploy/bot-package/
-          cp bot-function/host.json .deploy/bot-package/
           cp bot-function/requirements.txt .deploy/bot-package/
-          cp -R bot-function/health .deploy/bot-package/
-          cp -R bot-function/messages .deploy/bot-package/
           cp -R config .deploy/bot-package/
           find .deploy/bot-package -type d -name '__pycache__' -prune -exec rm -rf {} +
           cd .deploy/bot-package && zip -qr ../bot-package.zip . && cd ..
