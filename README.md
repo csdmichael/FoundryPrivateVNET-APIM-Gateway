@@ -16,6 +16,7 @@ The primary case study is **publishing AI agents to Microsoft Teams**. Each Foun
 - [Bot Registration](#bot-registration)
 - [APIM Configuration](#apim-configuration)
 - [AI Gateway Screenshots](#ai-gateway-screenshots)
+- [GUI to test Data Flow and to Import Agent in Teams and Copilot](#gui-to-test-data-flow-and-to-import-agent-in-teams-and-copilot)
 - [Pipeline Testing UI](#pipeline-testing-ui)
 - [Configuration](#configuration)
 - [Deployment](#deployment)
@@ -467,25 +468,125 @@ $env:FOUNDRY_DIRECT = '1'
 
 The Foundry Admin portal shows the `ai-gateway-apim-poc-my` gateway registered at the Foundry account level in the `eastus` region, linked to one resource and one project.
 
-![AI Gateway Config in Foundry](docs/Screenshots/01.%20AI%20Gateway%20Config%20in%20Foundry.png)
+![AI Gateway Config in Foundry](docs/Screenshots/AI%20Gateway%20Config/01.%20AI%20Gateway%20Config%20in%20Foundry.png)
 
 ### Foundry AI Gateway details
 
 Drilling into the gateway shows its basic configuration: region `eastus`, resource group `ai-myaacoub`, pricing tier `BasicV2`, and endpoint `https://ai-gateway-apim-poc-my.azure-api.net`. The `proj-default` project is listed with Gateway status **Enabled** and parent resource `002-ai-poc-private`.
 
-![AI Gateway config details in Foundry](docs/Screenshots/02.%20AI%20Gateway%20config%20details%20in%20Foundry.png)
+![AI Gateway config details in Foundry](docs/Screenshots/AI%20Gateway%20Config/02.%20AI%20Gateway%20config%20details%20in%20Foundry.png)
 
 ### APIM — Add Foundry API endpoint
 
 In the Azure Portal, the APIM service `ai-gateway-apim-poc-my` is configured with the `002-ai-poc-private` Azure AI Service API. Client compatibility is set to **OpenAI**, and the endpoint resolves to `https://ai-gateway-apim-poc-my.azure-api.net/002-ai-poc-private/openai`. The wizard automatically activates the APIM system-assigned managed identity and assigns the **Azure AI User** role on the selected Azure AI service.
 
-![API Management - Add Foundry API EndPoint](docs/Screenshots/03.%20API%20Management%20-%20Add%20Foundry%20API%20EndPoint.png)
+![API Management - Add Foundry API EndPoint](docs/Screenshots/AI%20Gateway%20Config/03.%20API%20Management%20-%20Add%20Foundry%20API%20EndPoint.png)
 
 ### APIM — Test Foundry API
 
 The APIM Test console shows the imported `002-ai-poc-private` API with all OpenAI-compatible operations (assistants, threads, runs, messages, vector stores). The screenshot demonstrates the "Returns a list of assistants" GET operation with the full request URL routed through the APIM gateway.
 
-![Test Foundry API in APIM](docs/Screenshots/04.%20Test%20Foundry%20API%20in%20APIM.png)
+![Test Foundry API in APIM](docs/Screenshots/AI%20Gateway%20Config/04.%20Test%20Foundry%20API%20in%20APIM.png)
+
+## GUI to test Data Flow and to Import Agent in Teams and Copilot
+
+The testing UI and Teams Developer Portal together cover the full workflow — validate every hop in the data pipeline, build the agent package, import it into Teams or Copilot, and interact with the agent.
+
+### Step 1 — Home Screen
+
+The testing UI home page shows the purpose of the app, a quick-start guide, and an overview of the 5-step pipeline test. Select a use case from the header to begin.
+
+![Home Screen](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/01.%20Home%20Screen.png)
+
+### Step 2 — Run all tests in sequence
+
+Click **Run All Tests** to execute all 5 pipeline steps sequentially. Each step proceeds even if the previous one fails, giving a full diagnostic report.
+
+![Run all tests in sequence](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/02.%20Run%20all%20tests%20in%20sequence.png)
+
+### Step 3 — Track flow of chat request across tiers
+
+The run-all view shows real-time progress as each tier is tested: AI Search → Foundry Agent → APIM Gateway → Bot Service → Agent Package.
+
+![Track Flow of Chat Request across Tiers](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/03.%20Track%20Flow%20of%20Chat%20Request%20across%20Tiers.png)
+
+### Step 4 — Test completed and agent package ready
+
+Once all steps complete, the summary shows PASS/FAIL status, latency, and total time for each tier. The agent package is ready to download.
+
+![Test Completed and Agent Package ready](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/04.%20Test%20Completed%20and%20Agent%20Package%20ready.png)
+
+### Step 5 — Drill through results or copy errors
+
+Expand any completed step to see full error messages, response text, source citations, and the endpoint that was called. Copy error details for troubleshooting.
+
+![Drill through results or copy errors if any](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/05.%20Drill%20through%20results%20or%20copy%20errors%20if%20any.png)
+
+### Step 6 — Build agent package and download zip
+
+The Agent Package step builds the Teams `.zip` package on-demand and provides a download link. The package contains the manifest, OpenAPI spec, and icons.
+
+![Build Agent Package and download Zip](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/06.%20Build%20Agent%20Package%20and%20download%20Zip.png)
+
+### Step 7 — Open Teams Dev Portal
+
+Click the **Teams Developer Portal** link to open [dev.teams.microsoft.com](https://dev.teams.microsoft.com) where you import and manage your agent apps.
+
+![Open Teams Dev Portal](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/07.%20Open%20Teams%20Dev%20Portal.png)
+
+### Step 8 — Import app zip package
+
+In the Teams Developer Portal, go to **Apps** → **Import app** and upload the `.zip` package from `Agent-Packages/<AgentName>/<AgentName>.zip`.
+
+![Import App — Zip Package](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/08.%20import%20App%20-%20Zip%20Package.png)
+
+### Step 9 — Preview in Teams
+
+After the manifest passes validation, click **Preview in Teams** to sideload the app for your account. This installs the agent without tenant admin approval.
+
+![Preview in Teams](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/09.%20Preview%20in%20Teams.png)
+
+### Step 10 — Open in Teams
+
+Teams launches and prompts you to add the app. Click **Add** to install the agent as a compose extension in your Teams client.
+
+![Open in Teams](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/10.%20Open%20in%20Teams.png)
+
+### Step 11 — Open in Teams or Copilot
+
+You can choose to open the agent in Microsoft Teams or in Microsoft Copilot. Both surfaces use the same APIM-backed `/chat` endpoint.
+
+![Open in Teams or Copilot](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/11.%20Open%20in%20Teams%20or%20Copilot.png)
+
+### Step 12 — Type a question or use a suggested prompt
+
+In the compose box, type your question or pick one of the suggested prompts. The agent calls the APIM gateway, which routes to the private Foundry project for inference.
+
+![Type a question or use suggested prompt](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/12.%20Type%20a%20question%20or%20use%20suggested%20prompt.png)
+
+### Step 13 — Agent responds in Microsoft Copilot
+
+When invoked from Copilot, the agent returns a grounded response rendered inline in the Copilot chat experience.
+
+![Agent responds in Copilot](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/13.%20Agent%20responds%20in%20Copilot.png)
+
+### Step 14 — Agent responds in Microsoft Teams
+
+When invoked from Teams, the response is displayed as an adaptive card in the compose extension results. The card includes the agent's answer grounded on the private Search index.
+
+![Agent responds in MS Teams](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/14.%20Agent%20responds%20in%20MS%20Teams.png)
+
+### Step 15 — View existing prompts
+
+The Prompts page shows the full sample prompt catalog grouped by query type. Use these prompts for repeatable testing across both agents.
+
+![View Existing Prompts](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/15.%20View%20Existing%20Prompts.png)
+
+### Step 16 — Eng Design Agent
+
+Switch the use-case selector to **Eng Design PPT** to test the engineering design agent. The same pipeline steps apply with the engineering-specific search index and prompts.
+
+![Eng Design Agent](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/16.%20Eng%20Design%20Agent.png)
 
 ## Pipeline Testing UI
 
