@@ -773,7 +773,7 @@ def get_agent_packages(use_case: str = "tax_pdf_forms") -> dict[str, Any]:
         "package_path": str(zip_path) if zip_path.exists() else None,
         "files": files_on_disk if files_on_disk else expected_files,
         "files_on_server": len(files_on_disk) > 0,
-        "teams_dev_portal_url": "https://dev.teams.microsoft.com/bots",
+        "teams_dev_portal_url": "https://dev.teams.microsoft.com/apps",
     }
 
 
