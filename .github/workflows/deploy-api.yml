@@ -66,13 +66,16 @@ jobs:
           az webapp config set --name "$APP" --resource-group "$RG" \
             --startup-file "bash /home/site/wwwroot/startup.sh" --output none
 
+          az webapp config appsettings delete --name "$APP" --resource-group "$RG" \
+            --setting-names WEBSITE_RUN_FROM_PACKAGE --output none 2>/dev/null || true
+
       - name: Deploy via Kudu async zip
         shell: bash
         run: |
           source scripts/deploy-helpers.sh
           deploy_and_wait "${{ steps.config.outputs.api_app_name }}" \
             "${{ steps.config.outputs.resource_group }}" \
-            .deploy/api-package.zip 600
+            .deploy/api-package.zip 1200
 
       - name: Re-import OpenAPI spec into APIM
         shell: bash
