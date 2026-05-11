@@ -1,13 +1,16 @@
 import json
 import logging
 import os
+import shutil
+import struct
 import time
 import asyncio
+import zlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
-from uuid import uuid4
+from uuid import NAMESPACE_DNS, uuid4, uuid5
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -753,6 +756,83 @@ async def test_bot_service(req: ChatRequest) -> dict[str, Any]:
     }
 
 
+def _make_solid_png(width: int, height: int, r: int, g: int, b: int) -> bytes:
+    """Generate a minimal solid-color RGB PNG without external libraries."""
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        c = tag + data
+        return struct.pack(">I", len(data)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
+
+    ihdr_data = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    raw = b"".join(b"\x00" + bytes([r, g, b] * width) for _ in range(height))
+    idat_data = zlib.compress(raw, 9)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", ihdr_data)
+        + chunk(b"IDAT", idat_data)
+        + chunk(b"IEND", b"")
+    )
+
+
+def _generate_limited_package_folder(limited_dir: Path, agent_name: str, use_case: str, uc_settings: dict) -> None:
+    """Auto-generate the -Limited package folder from config and full package assets."""
+    limited_dir.mkdir(parents=True, exist_ok=True)
+    full_dir = limited_dir.parent / agent_name
+    label = uc_settings.get("label", agent_name)
+
+    # Deterministic UUID for Limited variant
+    limited_id = str(uuid5(NAMESPACE_DNS, f"{agent_name}-limited"))
+
+    # Load full manifest to copy composeExtensions and other fields
+    full_manifest_path = full_dir / "manifest.json"
+    if full_manifest_path.exists():
+        full_manifest = json.loads(full_manifest_path.read_text(encoding="utf-8-sig"))
+        compose_exts = full_manifest.get("composeExtensions", [])
+        schema = full_manifest.get("$schema", "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json")
+        manifest_version = full_manifest.get("manifestVersion", "devPreview")
+        version = full_manifest.get("version", "1.0.0")
+        developer = full_manifest.get("developer", {})
+        short_desc = full_manifest.get("description", {}).get("short", "")
+    else:
+        compose_exts = []
+        schema = "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json"
+        manifest_version = "devPreview"
+        version = "1.0.0"
+        developer = {}
+        short_desc = f"Foundry agent for {label}."
+
+    limited_manifest = {
+        "$schema": schema,
+        "manifestVersion": manifest_version,
+        "version": version,
+        "id": limited_id,
+        "name": {"short": f"{label} Limited", "full": f"{label} Limited (APIM-direct)"},
+        "developer": developer,
+        "description": {
+            "short": short_desc,
+            "full": f"Limited Teams package for {label}. Routes directly through Azure API Management without Bot Service.",
+        },
+        "icons": {"outline": "outline.png", "color": "color.png"},
+        "accentColor": "#CA5010",
+        "composeExtensions": compose_exts,
+    }
+    (limited_dir / "manifest.json").write_text(json.dumps(limited_manifest, indent=4), encoding="utf-8")
+
+    # Copy apiSpecificationFile.json and responseRenderingTemplate.json from full package
+    for fname in ("apiSpecificationFile.json", "responseRenderingTemplate.json"):
+        src = full_dir / fname
+        dst = limited_dir / fname
+        if src.exists() and not dst.exists():
+            shutil.copy2(src, dst)
+
+    # Generate distinct Limited icons (orange #CA5010) — pure-Python, no PIL
+    color_png_path = limited_dir / "color.png"
+    outline_png_path = limited_dir / "outline.png"
+    if not color_png_path.exists():
+        color_png_path.write_bytes(_make_solid_png(192, 192, 202, 80, 16))
+    if not outline_png_path.exists():
+        outline_png_path.write_bytes(_make_solid_png(32, 32, 255, 255, 255))
+
+
 @app.get("/api/test/agent-packages")
 def get_agent_packages(use_case: str = "tax_pdf_forms") -> dict[str, Any]:
     """List available agent packages for download (full + limited variants)."""
@@ -776,7 +856,7 @@ def get_agent_packages(use_case: str = "tax_pdf_forms") -> dict[str, Any]:
     for package_type, package_dir in package_roots.items():
         zip_name = f"{agent_name}.zip" if package_type == "full" else f"{agent_name}-Limited.zip"
         zip_path = package_dir / zip_name
-        files_on_disk = [f.name for f in package_dir.iterdir() if f.is_file()] if package_dir.exists() else []
+        files_on_disk = [f.name for f in package_dir.iterdir() if f.is_file() and not f.name.endswith(".zip")] if package_dir.exists() else []
         package_variants.append(
             {
                 "package_type": package_type,
@@ -812,6 +892,10 @@ def build_agent_package(use_case: str = "tax_pdf_forms", package_type: str = "fu
     zip_name = f"{agent_name}.zip" if package_type == "full" else f"{agent_name}-Limited.zip"
     package_dir = Path(config.PROJECT_ROOT) / "Agent-Packages" / folder_name
     zip_path = package_dir / zip_name
+
+    # Auto-generate Limited folder from config when it doesn't exist
+    if package_type == "limited" and not package_dir.exists():
+        _generate_limited_package_folder(package_dir, agent_name, use_case, uc_settings)
 
     required_files = ["manifest.json", "apiSpecificationFile.json", "responseRenderingTemplate.json"]
     optional_files = ["color.png", "outline.png"]
