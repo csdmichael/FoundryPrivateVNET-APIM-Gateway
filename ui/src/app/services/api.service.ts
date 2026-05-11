@@ -118,15 +118,24 @@ export interface BotTestResult {
 export interface AgentPackageInfo {
   use_case: string;
   agent_name: string;
+  packages: AgentPackageVariant[];
+  teams_dev_portal_url: string;
+}
+
+export interface AgentPackageVariant {
+  package_type: 'full' | 'limited';
+  display_name: string;
+  experience: string;
   package_exists: boolean;
   package_path: string | null;
   files: string[];
-  teams_dev_portal_url: string;
+  files_on_server?: boolean;
 }
 
 export interface AgentPackageBuildResult {
   ok: boolean;
   agent_name: string;
+  package_type?: 'full' | 'limited';
   zip_path: string;
   files_included: string[];
 }
@@ -210,12 +219,14 @@ export class ApiService {
     return this.http.get<AgentPackageInfo>(`${this.base}/test/agent-packages`, { params: { use_case: useCase } });
   }
 
-  buildAgentPackage(useCase: string): Observable<AgentPackageBuildResult> {
-    return this.http.post<AgentPackageBuildResult>(`${this.base}/test/agent-packages/build`, null, { params: { use_case: useCase } });
+  buildAgentPackage(useCase: string, packageType: 'full' | 'limited'): Observable<AgentPackageBuildResult> {
+    return this.http.post<AgentPackageBuildResult>(`${this.base}/test/agent-packages/build`, null, {
+      params: { use_case: useCase, package_type: packageType },
+    });
   }
 
-  getAgentPackageDownloadUrl(useCase: string): string {
-    return `${this.base}/test/agent-packages/download?use_case=${useCase}`;
+  getAgentPackageDownloadUrl(useCase: string, packageType: 'full' | 'limited'): string {
+    return `${this.base}/test/agent-packages/download?use_case=${useCase}&package_type=${packageType}`;
   }
 
   getAzureResourcesConfig(): Observable<AzureResourcesConfig> {

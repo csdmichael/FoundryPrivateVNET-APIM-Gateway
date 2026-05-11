@@ -42,3 +42,10 @@ In each test case show detailed result with error messages in master - detailed 
 The goal is to troubleshoot the data flow of this application from start to end.
 In home page, explain the purpose of UI and steps to do.
 In header of UI, add Microsoft logo in top right and in footer add: Copyright to Michael Yaacoub @ Microsoft | LinkedIn: https://www.linkedin.com/in/michael-yaacoub-7a46436 | GitHub:  https://github.com/csdmichael
+
+Enhancements
+==============
+For 2 foundry agents exposed via APIM, create another package per app / agent and append word Limited to it. 
+This limited agent app does not go through bot service but talks to APIM API directly which will not have full chat experience once published in MS Teams or Copilot. 
+Build a different icon for limited packaged apps versus the ones that go through bot services.
+Also, update ui and readme accordingly

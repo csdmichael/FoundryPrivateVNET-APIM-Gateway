@@ -1,7 +1,7 @@
 <ion-content class="ion-padding">
   <div class="page-container" [class.desktop]="device.isDesktop" [class.tablet]="device.isTablet">
     <h2><ion-icon name="download-outline"></ion-icon> Step 5: Agent Package</h2>
-    <p class="page-desc">Build, download, and import the <strong>{{ uc.active.label }}</strong> agent package into the Teams Developer Portal.</p>
+    <p class="page-desc">Build, download, and import Full (bot-backed) or Limited (APIM-direct) packages for <strong>{{ uc.active.label }}</strong> into the Teams Developer Portal.</p>
 
     <!-- Loading state -->
     <div *ngIf="loadingInfo" class="empty-state">
@@ -16,24 +16,26 @@
 
     <!-- Package info -->
     <div *ngIf="info && !loadingInfo">
-      <ion-card>
+      <ion-card *ngFor="let pkg of info.packages" class="package-card" [class.limited]="pkg.package_type === 'limited'">
         <ion-card-header>
           <ion-card-title>
-            <ion-icon name="cube-outline"></ion-icon> {{ info.agent_name }}
+            <ion-icon [name]="pkg.package_type === 'limited' ? 'flash-outline' : 'chatbubbles-outline'"></ion-icon>
+            {{ pkg.display_name }}
           </ion-card-title>
+          <ion-card-subtitle>{{ pkg.experience }}</ion-card-subtitle>
         </ion-card-header>
         <ion-card-content>
           <div class="kpi-row">
-            <app-kpi-badge [value]="info.files.length" label="Files" color=""></app-kpi-badge>
-            <app-kpi-badge [value]="info.package_exists ? 'Yes' : 'No'" label="Package Built"
-              [color]="info.package_exists ? 'success' : 'warning'"></app-kpi-badge>
+            <app-kpi-badge [value]="pkg.files.length" label="Files" color=""></app-kpi-badge>
+            <app-kpi-badge [value]="pkg.package_exists ? 'Yes' : 'No'" label="Package Built"
+              [color]="pkg.package_exists ? 'success' : 'warning'"></app-kpi-badge>
           </div>
 
           <!-- File list -->
           <div class="file-list">
             <strong>Package Files:</strong>
             <ion-list lines="none">
-              <ion-item *ngFor="let f of info.files">
+              <ion-item *ngFor="let f of pkg.files">
                 <ion-icon name="document-outline" slot="start" color="medium"></ion-icon>
                 <ion-label>{{ f }}</ion-label>
               </ion-item>
@@ -42,13 +44,13 @@
 
           <!-- Actions -->
           <div class="action-row">
-            <ion-button (click)="build()" [disabled]="building" color="primary">
+            <ion-button (click)="build(pkg)" [disabled]="building" color="primary">
               <ion-spinner *ngIf="building" name="crescent" slot="start"></ion-spinner>
               <ion-icon name="hammer-outline" slot="start" *ngIf="!building"></ion-icon>
-              {{ building ? 'Building...' : 'Build Package' }}
+              {{ building ? 'Building...' : ('Build ' + (pkg.package_type === 'limited' ? 'Limited' : 'Full') + ' Package') }}
             </ion-button>
 
-            <ion-button (click)="download()" [disabled]="!info.package_exists" color="success">
+            <ion-button (click)="download(pkg)" [disabled]="!pkg.package_exists" color="success">
               <ion-icon name="download-outline" slot="start"></ion-icon>
               Download .zip
             </ion-button>
@@ -60,7 +62,7 @@
           </div>
 
           <!-- Build result -->
-          <ion-card *ngIf="buildResult" class="build-result" color="light">
+          <ion-card *ngIf="buildResult && buildResult.package_type === pkg.package_type" class="build-result" color="light">
             <ion-card-header>
               <ion-card-title>
                 <ion-icon name="checkmark-circle" color="success"></ion-icon> Package Built
@@ -82,12 +84,13 @@
         </ion-card-header>
         <ion-card-content>
           <ol>
-            <li>Click <strong>Build Package</strong> to create the .zip archive.</li>
-            <li>Click <strong>Download .zip</strong> to save the package locally.</li>
+            <li>Choose <strong>Full</strong> for bot-backed chat experience or <strong>Limited</strong> for APIM-direct only.</li>
+            <li>Click <strong>Build ... Package</strong> to create the selected .zip archive.</li>
+            <li>Click <strong>Download .zip</strong> to save the selected package locally.</li>
             <li>Open the <strong>Teams Developer Portal</strong> link above.</li>
             <li>Go to <strong>Apps &rarr; Import an existing app</strong>.</li>
             <li>Upload the downloaded .zip file.</li>
-            <li>Configure any remaining settings (bot ID, messaging endpoint) and publish.</li>
+            <li>For Full package, configure bot settings if needed. For Limited package, use compose extension only.</li>
           </ol>
         </ion-card-content>
       </ion-card>

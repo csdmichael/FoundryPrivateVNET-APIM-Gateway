@@ -1,5 +1,13 @@
 @use '../test-common';
 
+.package-card {
+  margin-bottom: 16px;
+}
+
+.package-card.limited {
+  border-left: 4px solid var(--ion-color-warning);
+}
+
 .file-list {
   margin-bottom: 16px;
   strong { font-size: 0.85rem; }

@@ -154,30 +154,67 @@ function Get-NextVersion([string]$manifestPath) {
     return '1.0.0'
 }
 
+function New-LimitedIconAssets {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$packageDir
+    )
+
+    Add-Type -AssemblyName System.Drawing
+
+    # Create a distinct limited color icon (192x192)
+    $colorPath = Join-Path $packageDir 'color.png'
+    $colorBmp = New-Object System.Drawing.Bitmap 192, 192
+    $gfx = [System.Drawing.Graphics]::FromImage($colorBmp)
+    $gfx.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $gfx.Clear([System.Drawing.Color]::FromArgb(19, 57, 91))
+    $brush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(0, 180, 216))
+    $gfx.FillEllipse($brush, 16, 16, 160, 160)
+    $font = New-Object System.Drawing.Font('Segoe UI Bold', 84, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+    $textBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
+    $format = New-Object System.Drawing.StringFormat
+    $format.Alignment = [System.Drawing.StringAlignment]::Center
+    $format.LineAlignment = [System.Drawing.StringAlignment]::Center
+    $gfx.DrawString('L', $font, $textBrush, (New-Object System.Drawing.RectangleF(0, 0, 192, 192)), $format)
+    $colorBmp.Save($colorPath, [System.Drawing.Imaging.ImageFormat]::Png)
+
+    $format.Dispose()
+    $textBrush.Dispose()
+    $font.Dispose()
+    $brush.Dispose()
+    $gfx.Dispose()
+    $colorBmp.Dispose()
+
+    # Create a distinct limited outline icon (32x32, white + transparent)
+    $outlinePath = Join-Path $packageDir 'outline.png'
+    $outlineBmp = New-Object System.Drawing.Bitmap 32, 32
+    $outlineGfx = [System.Drawing.Graphics]::FromImage($outlineBmp)
+    $outlineGfx.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $outlineGfx.Clear([System.Drawing.Color]::Transparent)
+    $outlinePen = New-Object System.Drawing.Pen ([System.Drawing.Color]::White, 2)
+    $outlineGfx.DrawEllipse($outlinePen, 2, 2, 28, 28)
+    $outlineFont = New-Object System.Drawing.Font('Segoe UI', 18, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+    $outlineBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
+    $outlineFormat = New-Object System.Drawing.StringFormat
+    $outlineFormat.Alignment = [System.Drawing.StringAlignment]::Center
+    $outlineFormat.LineAlignment = [System.Drawing.StringAlignment]::Center
+    $outlineGfx.DrawString('L', $outlineFont, $outlineBrush, (New-Object System.Drawing.RectangleF(0, 0, 32, 32)), $outlineFormat)
+    $outlineBmp.Save($outlinePath, [System.Drawing.Imaging.ImageFormat]::Png)
+
+    $outlineFormat.Dispose()
+    $outlineBrush.Dispose()
+    $outlineFont.Dispose()
+    $outlinePen.Dispose()
+    $outlineGfx.Dispose()
+    $outlineBmp.Dispose()
+}
+
 foreach ($ucKey in $useCases.Keys) {
     $uc = $useCases[$ucKey]
-    $pkgDir = $uc.PackageDir
-
-    Write-Host "`nGenerating package: $($uc.ShortName)"
-    Write-Host "  Directory: $pkgDir"
-
-    New-Item -ItemType Directory -Force -Path $pkgDir | Out-Null
-
-    $manifestPath = Join-Path $pkgDir 'manifest.json'
-    $nextVersion = Get-NextVersion $manifestPath
-
-    # If we exported the agent, use its instructions for the disclaimer
-    $exported = $exportedAgents[$ucKey]
-    if ($exported) {
-        Write-Host "  Using exported agent config (model=$($exported.Model))"
-    }
-
-    # ── Bot prompt commands from prompts_config ──────────────────────────
     $agentPrompts = $promptsConfig.use_cases.$ucKey.agent
     $botCommands = @(
         @{ title = 'Ask'; description = "Ask a question about $($uc.TopicLabel)" }
     )
-    # Pick up to 5 prompts for bot commands
     $cmdPrompts = @($agentPrompts | Select-Object -First 5)
     foreach ($p in $cmdPrompts) {
         $words = $p.text -split '\s+' | Select-Object -First 4
@@ -195,151 +232,204 @@ foreach ($ucKey in $useCases.Keys) {
         }
     }
 
-    # ── Compose extension sample prompts ─────────────────────────────────
     $samplePrompts = @($agentPrompts | Select-Object -First 5 | ForEach-Object {
         $t = $_.text; if ($t.Length -gt 128) { $t = $t.Substring(0, 125) + '...' }
         @{ text = $t }
     })
 
-    # ── manifest.json ────────────────────────────────────────────────────
-    $manifest = [ordered]@{
-        '$schema'        = 'https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json'
-        manifestVersion  = 'devPreview'
-        version          = $nextVersion
-        id               = $uc.ManifestId
-        name             = [ordered]@{ short = $uc.ShortName; full = $uc.FullName }
-        developer        = [ordered]@{
-            name          = 'Michael Yaacoub at Microsoft'
-            websiteUrl    = "$githubBaseUrl/support.md"
-            privacyUrl    = "$githubBaseUrl/privacy-policy.md"
-            termsOfUseUrl = "$githubBaseUrl/terms-of-use.md"
+    $variants = @(
+        @{
+            Key = 'full'
+            PackageDir = $uc.PackageDir
+            PackageName = $uc.AgentName
+            ManifestId = $uc.ManifestId
+            ShortName = $uc.ShortName
+            FullName = $uc.FullName
+            ShortDesc = $uc.ShortDesc
+            FullDesc = $uc.FullDesc
+            ApiTitle = $uc.ApiTitle
+            ApiDescription = $uc.ApiDescription
+            ApiSummary = $uc.ApiSummary
+            ApiOpDesc = $uc.ApiOpDesc
+            IncludeBot = $true
+            IsLimited = $false
+        },
+        @{
+            Key = 'limited'
+            PackageDir = "$($uc.PackageDir)-Limited"
+            PackageName = "$($uc.AgentName)-Limited"
+            ManifestId = ([guid]::NewGuid()).Guid
+            ShortName = "$($uc.ShortName) Limited"
+            FullName = "$($uc.FullName) Limited"
+            ShortDesc = "$($uc.ShortDesc) Limited APIM-only package."
+            FullDesc = "Limited package for $($uc.ShortName) that calls APIM directly and does not include a bot-based full chat experience in Teams or Copilot."
+            ApiTitle = "$($uc.ApiTitle) Limited"
+            ApiDescription = "Limited APIM-direct package for $($uc.ApiTitle) without bot orchestration."
+            ApiSummary = "$($uc.ApiSummary) (Limited APIM Direct)"
+            ApiOpDesc = "$($uc.ApiOpDesc) This Limited package sends prompts directly to APIM and excludes bot chat capabilities."
+            IncludeBot = $false
+            IsLimited = $true
         }
-        description      = [ordered]@{ short = $uc.ShortDesc; full = $uc.FullDesc }
-        icons            = [ordered]@{ outline = 'outline.png'; color = 'color.png' }
-        accentColor      = $uc.AccentColor
-        bots             = @(
-            [ordered]@{
-                botId            = $uc.BotAppId
-                supportsSessions = $true
-                scopes           = @('personal', 'team', 'groupChat', 'copilot')
-                commandLists     = @(
-                    [ordered]@{
-                        scopes   = @('personal', 'copilot')
-                        commands = $botCommands
-                    }
-                )
-            }
-        )
-        copilotAgents    = [ordered]@{
-            customEngineAgents = @(
-                [ordered]@{
-                    id         = $uc.BotAppId
-                    type       = 'bot'
-                    disclaimer = [ordered]@{ text = $uc.Disclaimer }
-                }
-            )
-        }
-        composeExtensions = @(
-            [ordered]@{
-                composeExtensionType             = 'apiBased'
-                apiSpecificationFile             = 'apiSpecificationFile.json'
-                commands = @(
-                    [ordered]@{
-                        id                              = 'chatWithAgent'
-                        type                            = 'query'
-                        title                           = "Ask $($uc.ShortName -replace ' Agent$','')"
-                        description                     = "Ask a question about $($uc.TopicLabel)"
-                        samplePrompts                   = $samplePrompts
-                        initialRun                      = $false
-                        apiResponseRenderingTemplateFile = 'responseRenderingTemplate.json'
-                        parameters = @(
-                            [ordered]@{
-                                name        = 'prompt'
-                                title       = 'Question'
-                                description = $uc.ParamDesc
-                                inputType   = 'text'
-                            }
-                        )
-                    }
-                )
-            }
-        )
-        permissions      = @('identity', 'messageTeamMembers')
-        validDomains     = @(([uri]$apimGatewayUrl).Host)
+    )
+
+    # If we exported the agent, use it for logging context
+    $exported = $exportedAgents[$ucKey]
+    if ($exported) {
+        Write-Host "  Using exported agent config (model=$($exported.Model))"
     }
 
-    $manifest | ConvertTo-Json -Depth 15 | Set-Content $manifestPath -Encoding UTF8
-    Write-Host "  Created manifest.json (v$nextVersion)"
+    foreach ($variant in $variants) {
+        $pkgDir = $variant.PackageDir
+        Write-Host "`nGenerating package: $($variant.ShortName)"
+        Write-Host "  Directory: $pkgDir"
 
-    # ── apiSpecificationFile.json ────────────────────────────────────────
-    $apiSpec = [ordered]@{
-        openapi = '3.0.1'
-        info    = [ordered]@{
-            title       = $uc.ApiTitle
-            version     = $nextVersion
-            description = $uc.ApiDescription
-            contact     = [ordered]@{
-                name = 'Foundry Private VNET APIM Gateway'
-                url  = "$githubBaseUrl/support.md"
+        New-Item -ItemType Directory -Force -Path $pkgDir | Out-Null
+
+        $manifestPath = Join-Path $pkgDir 'manifest.json'
+        $nextVersion = Get-NextVersion $manifestPath
+
+        $manifest = [ordered]@{
+            '$schema'        = 'https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json'
+            manifestVersion  = 'devPreview'
+            version          = $nextVersion
+            id               = $variant.ManifestId
+            name             = [ordered]@{ short = $variant.ShortName; full = $variant.FullName }
+            developer        = [ordered]@{
+                name          = 'Michael Yaacoub at Microsoft'
+                websiteUrl    = "$githubBaseUrl/support.md"
+                privacyUrl    = "$githubBaseUrl/privacy-policy.md"
+                termsOfUseUrl = "$githubBaseUrl/terms-of-use.md"
             }
-        }
-        'x-security-controls' = [ordered]@{
-            rateLimiting    = [ordered]@{
-                strategy                  = 'Handled by Azure API Management policies and upstream gateway throttling.'
-                ipBasedThrottling         = $true
-                subscriptionOrUserRateLimits = $true
-                spikeArrest               = $true
-                payloadSizeLimitKb        = 64
-                accountRecoveryThresholds = [ordered]@{ maxAttempts = 5; windowSeconds = 300 }
-            }
-            inputValidation = [ordered]@{
-                strategy                  = 'The API accepts a single prompt field and rejects malformed payloads through APIM policy and backend validation.'
-                contentTypeEnforcement    = $true
-                headerValidation          = $true
-                schemaValidationAtGateway = $true
-                wafProtection             = $true
-            }
-            errorHandling   = [ordered]@{
-                strategy                       = 'Errors are normalized by the gateway and backend response shaping before being returned to the Teams client.'
-                genericExternalErrors          = $true
-                secureLogStorage               = $true
-                structuredLoggingToLogAnalytics = $true
-            }
-        }
-        servers = @( [ordered]@{ url = "$apimGatewayUrl/$apimApiPath" } )
-        paths   = [ordered]@{
-            '/chat' = [ordered]@{
-                post = [ordered]@{
-                    operationId = 'chatWithAgent'
-                    summary     = $uc.ApiSummary
-                    description = $uc.ApiOpDesc
-                    requestBody = [ordered]@{
-                        required = $true
-                        content  = [ordered]@{
-                            'application/json' = [ordered]@{
-                                schema = [ordered]@{
-                                    type       = 'object'
-                                    required   = @('prompt')
-                                    properties = [ordered]@{
-                                        prompt = [ordered]@{
-                                            type        = 'string'
-                                            description = $uc.ParamDesc
-                                        }
-                                    }
+            description      = [ordered]@{ short = $variant.ShortDesc; full = $variant.FullDesc }
+            icons            = [ordered]@{ outline = 'outline.png'; color = 'color.png' }
+            accentColor      = $uc.AccentColor
+            composeExtensions = @(
+                [ordered]@{
+                    composeExtensionType             = 'apiBased'
+                    apiSpecificationFile             = 'apiSpecificationFile.json'
+                    commands = @(
+                        [ordered]@{
+                            id                              = 'chatWithAgent'
+                            type                            = 'query'
+                            title                           = "Ask $($variant.ShortName -replace ' Agent$','')"
+                            description                     = "Ask a question about $($uc.TopicLabel)"
+                            samplePrompts                   = $samplePrompts
+                            initialRun                      = $false
+                            apiResponseRenderingTemplateFile = 'responseRenderingTemplate.json'
+                            parameters = @(
+                                [ordered]@{
+                                    name        = 'prompt'
+                                    title       = 'Question'
+                                    description = $uc.ParamDesc
+                                    inputType   = 'text'
                                 }
-                            }
+                            )
                         }
+                    )
+                }
+            )
+            permissions      = @('identity', 'messageTeamMembers')
+            validDomains     = @(([uri]$apimGatewayUrl).Host)
+        }
+
+        if ($variant.IncludeBot) {
+            $manifest.bots = @(
+                [ordered]@{
+                    botId            = $uc.BotAppId
+                    supportsSessions = $true
+                    scopes           = @('personal', 'team', 'groupChat', 'copilot')
+                    commandLists     = @(
+                        [ordered]@{
+                            scopes   = @('personal', 'copilot')
+                            commands = $botCommands
+                        }
+                    )
+                }
+            )
+
+            $manifest.copilotAgents = [ordered]@{
+                customEngineAgents = @(
+                    [ordered]@{
+                        id         = $uc.BotAppId
+                        type       = 'bot'
+                        disclaimer = [ordered]@{ text = $uc.Disclaimer }
                     }
-                    responses = [ordered]@{
-                        '200' = [ordered]@{
-                            description = 'Agent response'
-                            content     = [ordered]@{
+                )
+            }
+        }
+
+        $manifest | ConvertTo-Json -Depth 15 | Set-Content $manifestPath -Encoding UTF8
+        Write-Host "  Created manifest.json (v$nextVersion)"
+
+        $apiSpec = [ordered]@{
+            openapi = '3.0.1'
+            info    = [ordered]@{
+                title       = $variant.ApiTitle
+                version     = $nextVersion
+                description = $variant.ApiDescription
+                contact     = [ordered]@{
+                    name = 'Foundry Private VNET APIM Gateway'
+                    url  = "$githubBaseUrl/support.md"
+                }
+            }
+            'x-security-controls' = [ordered]@{
+                rateLimiting    = [ordered]@{
+                    strategy                  = 'Handled by Azure API Management policies and upstream gateway throttling.'
+                    ipBasedThrottling         = $true
+                    subscriptionOrUserRateLimits = $true
+                    spikeArrest               = $true
+                    payloadSizeLimitKb        = 64
+                    accountRecoveryThresholds = [ordered]@{ maxAttempts = 5; windowSeconds = 300 }
+                }
+                inputValidation = [ordered]@{
+                    strategy                  = 'The API accepts a single prompt field and rejects malformed payloads through APIM policy and backend validation.'
+                    contentTypeEnforcement    = $true
+                    headerValidation          = $true
+                    schemaValidationAtGateway = $true
+                    wafProtection             = $true
+                }
+                errorHandling   = [ordered]@{
+                    strategy                       = 'Errors are normalized by the gateway and backend response shaping before being returned to the Teams client.'
+                    genericExternalErrors          = $true
+                    secureLogStorage               = $true
+                    structuredLoggingToLogAnalytics = $true
+                }
+            }
+            servers = @( [ordered]@{ url = "$apimGatewayUrl/$apimApiPath" } )
+            paths   = [ordered]@{
+                '/chat' = [ordered]@{
+                    post = [ordered]@{
+                        operationId = 'chatWithAgent'
+                        summary     = $variant.ApiSummary
+                        description = $variant.ApiOpDesc
+                        requestBody = [ordered]@{
+                            required = $true
+                            content  = [ordered]@{
                                 'application/json' = [ordered]@{
                                     schema = [ordered]@{
                                         type       = 'object'
+                                        required   = @('prompt')
                                         properties = [ordered]@{
-                                            response = [ordered]@{ type = 'string'; description = 'The agent answer' }
-                                            use_case = [ordered]@{ type = 'string' }
+                                            prompt = [ordered]@{
+                                                type        = 'string'
+                                                description = $uc.ParamDesc
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        responses = [ordered]@{
+                            '200' = [ordered]@{
+                                description = 'Agent response'
+                                content     = [ordered]@{
+                                    'application/json' = [ordered]@{
+                                        schema = [ordered]@{
+                                            type       = 'object'
+                                            properties = [ordered]@{
+                                                response = [ordered]@{ type = 'string'; description = 'The agent answer' }
+                                                use_case = [ordered]@{ type = 'string' }
+                                            }
                                         }
                                     }
                                 }
@@ -349,52 +439,55 @@ foreach ($ucKey in $useCases.Keys) {
                 }
             }
         }
-    }
 
-    $apiSpec | ConvertTo-Json -Depth 15 | Set-Content (Join-Path $pkgDir 'apiSpecificationFile.json') -Encoding UTF8
-    Write-Host "  Created apiSpecificationFile.json"
+        $apiSpec | ConvertTo-Json -Depth 15 | Set-Content (Join-Path $pkgDir 'apiSpecificationFile.json') -Encoding UTF8
+        Write-Host "  Created apiSpecificationFile.json"
 
-    # ── responseRenderingTemplate.json ───────────────────────────────────
-    $renderTemplate = [ordered]@{
-        version              = 'devPreview'
-        jsonPath             = '$'
-        responseLayout       = 'list'
-        responseCardTemplate = [ordered]@{
-            type      = 'AdaptiveCard'
-            '$schema' = 'http://adaptivecards.io/schemas/adaptive-card.json'
-            version   = '1.5'
-            body      = @(
-                [ordered]@{ type = 'TextBlock'; text = '${response}'; wrap = $true }
-            )
+        $renderTemplate = [ordered]@{
+            version              = 'devPreview'
+            jsonPath             = '$'
+            responseLayout       = 'list'
+            responseCardTemplate = [ordered]@{
+                type      = 'AdaptiveCard'
+                '$schema' = 'http://adaptivecards.io/schemas/adaptive-card.json'
+                version   = '1.5'
+                body      = @(
+                    [ordered]@{ type = 'TextBlock'; text = '${response}'; wrap = $true }
+                )
+            }
+            previewCardTemplate  = [ordered]@{
+                title = $variant.ShortName
+                text  = '${response}'
+            }
         }
-        previewCardTemplate  = [ordered]@{
-            title = $uc.ShortName
-            text  = '${response}'
+
+        $renderTemplate | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $pkgDir 'responseRenderingTemplate.json') -Encoding UTF8
+        Write-Host "  Created responseRenderingTemplate.json"
+
+        if ($variant.IsLimited) {
+            New-LimitedIconAssets -packageDir $pkgDir
+            Write-Host "  Created Limited icon set"
         }
-    }
-
-    $renderTemplate | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $pkgDir 'responseRenderingTemplate.json') -Encoding UTF8
-    Write-Host "  Created responseRenderingTemplate.json"
-
-    # ── Ensure icon files exist ──────────────────────────────────────────
-    foreach ($icon in @('color.png', 'outline.png')) {
-        $iconPath = Join-Path $pkgDir $icon
-        if (-not (Test-Path $iconPath)) {
-            Write-Warning "  Missing icon: $iconPath — package will be incomplete."
+        else {
+            foreach ($icon in @('color.png', 'outline.png')) {
+                $iconPath = Join-Path $pkgDir $icon
+                if (-not (Test-Path $iconPath)) {
+                    Write-Warning "  Missing icon: $iconPath — package will be incomplete."
+                }
+            }
         }
+
+        $zipName = "$($variant.PackageName).zip"
+        $zipPath = Join-Path $pkgDir $zipName
+        if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+
+        $filesToZip = @('manifest.json', 'color.png', 'outline.png', 'apiSpecificationFile.json', 'responseRenderingTemplate.json') |
+            ForEach-Object { Join-Path $pkgDir $_ } |
+            Where-Object { Test-Path $_ }
+
+        Compress-Archive -Path $filesToZip -DestinationPath $zipPath
+        Write-Host "  Packaged: $zipPath" -ForegroundColor Green
     }
-
-    # ── Zip the package ──────────────────────────────────────────────────
-    $zipName = "$($uc.AgentName).zip"
-    $zipPath = Join-Path $pkgDir $zipName
-    if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-
-    $filesToZip = @('manifest.json', 'color.png', 'outline.png', 'apiSpecificationFile.json', 'responseRenderingTemplate.json') |
-        ForEach-Object { Join-Path $pkgDir $_ } |
-        Where-Object { Test-Path $_ }
-
-    Compress-Archive -Path $filesToZip -DestinationPath $zipPath
-    Write-Host "  Packaged: $zipPath" -ForegroundColor Green
 }
 
 # ── Summary ──────────────────────────────────────────────────────────────────
@@ -405,10 +498,17 @@ if ($exportedAgents.Count -gt 0) {
 }
 foreach ($ucKey in $useCases.Keys) {
     $uc = $useCases[$ucKey]
-    $zip = Join-Path $uc.PackageDir "$($uc.AgentName).zip"
-    if (Test-Path $zip) {
-        $size = [math]::Round((Get-Item $zip).Length / 1KB, 1)
-        Write-Host ('  [{0}] {1} ({2} KB)' -f $ucKey, $zip, $size)
+    $zipFull = Join-Path $uc.PackageDir "$($uc.AgentName).zip"
+    $zipLimited = Join-Path "$($uc.PackageDir)-Limited" "$($uc.AgentName)-Limited.zip"
+
+    if (Test-Path $zipFull) {
+        $size = [math]::Round((Get-Item $zipFull).Length / 1KB, 1)
+        Write-Host ('  [{0}] {1} ({2} KB)' -f $ucKey, $zipFull, $size)
+    }
+
+    if (Test-Path $zipLimited) {
+        $size = [math]::Round((Get-Item $zipLimited).Length / 1KB, 1)
+        Write-Host ('  [{0}-limited] {1} ({2} KB)' -f $ucKey, $zipLimited, $size)
     }
 }
 Write-Host ''

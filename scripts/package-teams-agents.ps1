@@ -3,7 +3,9 @@ Set-Location $PSScriptRoot\..
 
 $packages = @(
     @{ Name = 'Tax-PDF-Forms-Agent'; Folder = 'Agent-Packages\Tax-PDF-Forms-Agent' },
-    @{ Name = 'Eng-Design-PPT-Agent'; Folder = 'Agent-Packages\Eng-Design-PPT-Agent' }
+    @{ Name = 'Eng-Design-PPT-Agent'; Folder = 'Agent-Packages\Eng-Design-PPT-Agent' },
+    @{ Name = 'Tax-PDF-Forms-Agent-Limited'; Folder = 'Agent-Packages\Tax-PDF-Forms-Agent-Limited' },
+    @{ Name = 'Eng-Design-PPT-Agent-Limited'; Folder = 'Agent-Packages\Eng-Design-PPT-Agent-Limited' }
 )
 
 foreach ($package in $packages) {

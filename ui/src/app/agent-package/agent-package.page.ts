@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { ApiService, AgentPackageInfo, AgentPackageBuildResult } from '../services/api.service';
+import { ApiService, AgentPackageInfo, AgentPackageBuildResult, AgentPackageVariant } from '../services/api.service';
 import { UseCaseService } from '../services/use-case.service';
 import { DeviceService } from '../services/device.service';
 
@@ -43,10 +43,10 @@ export class AgentPackagePage implements OnInit, OnDestroy {
     });
   }
 
-  build() {
+  build(variant: AgentPackageVariant) {
     this.building = true;
     this.buildResult = null;
-    this.api.buildAgentPackage(this.uc.activeKey).subscribe({
+    this.api.buildAgentPackage(this.uc.activeKey, variant.package_type).subscribe({
       next: (r) => {
         this.buildResult = r;
         this.building = false;
@@ -56,7 +56,7 @@ export class AgentPackagePage implements OnInit, OnDestroy {
     });
   }
 
-  download() {
-    window.open(this.api.getAgentPackageDownloadUrl(this.uc.activeKey), '_blank');
+  download(variant: AgentPackageVariant) {
+    window.open(this.api.getAgentPackageDownloadUrl(this.uc.activeKey, variant.package_type), '_blank');
   }
 }

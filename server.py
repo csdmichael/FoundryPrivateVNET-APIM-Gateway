@@ -755,38 +755,63 @@ async def test_bot_service(req: ChatRequest) -> dict[str, Any]:
 
 @app.get("/api/test/agent-packages")
 def get_agent_packages(use_case: str = "tax_pdf_forms") -> dict[str, Any]:
-    """List available agent packages for download."""
+    """List available agent packages for download (full + limited variants)."""
     _require_use_case(use_case)
     uc_settings = config.use_case_settings(use_case)
     agent_name = uc_settings["agent_name"]
-    package_dir = Path(config.PROJECT_ROOT) / "Agent-Packages" / agent_name
-    zip_path = package_dir / f"{agent_name}.zip"
+    package_roots = {
+        "full": Path(config.PROJECT_ROOT) / "Agent-Packages" / agent_name,
+        "limited": Path(config.PROJECT_ROOT) / "Agent-Packages" / f"{agent_name}-Limited",
+    }
 
-    # Package files might not be on the deployed server — report config info
-    expected_files = ["manifest.json", "apiSpecificationFile.json", "responseRenderingTemplate.json", "color.png", "outline.png"]
-    files_on_disk = [f.name for f in package_dir.iterdir() if f.is_file()] if package_dir.exists() else []
+    expected_files = [
+        "manifest.json",
+        "apiSpecificationFile.json",
+        "responseRenderingTemplate.json",
+        "color.png",
+        "outline.png",
+    ]
+
+    package_variants = []
+    for package_type, package_dir in package_roots.items():
+        zip_name = f"{agent_name}.zip" if package_type == "full" else f"{agent_name}-Limited.zip"
+        zip_path = package_dir / zip_name
+        files_on_disk = [f.name for f in package_dir.iterdir() if f.is_file()] if package_dir.exists() else []
+        package_variants.append(
+            {
+                "package_type": package_type,
+                "display_name": f"{agent_name} ({package_type.capitalize()})",
+                "experience": "Full chat via Bot Service" if package_type == "full" else "Limited APIM-direct (no bot chat)",
+                "package_exists": zip_path.exists(),
+                "package_path": str(zip_path) if zip_path.exists() else None,
+                "files": files_on_disk if files_on_disk else expected_files,
+                "files_on_server": len(files_on_disk) > 0,
+            }
+        )
 
     return {
         "use_case": use_case,
         "agent_name": agent_name,
-        "package_exists": zip_path.exists(),
-        "package_path": str(zip_path) if zip_path.exists() else None,
-        "files": files_on_disk if files_on_disk else expected_files,
-        "files_on_server": len(files_on_disk) > 0,
-        "teams_dev_portal_url": "https://dev.teams.microsoft.com/bots",
+        "packages": package_variants,
+        "teams_dev_portal_url": "https://dev.teams.microsoft.com/apps",
     }
 
 
 @app.post("/api/test/agent-packages/build")
-def build_agent_package(use_case: str = "tax_pdf_forms") -> dict[str, Any]:
-    """Build (zip) the agent package for a use case."""
+def build_agent_package(use_case: str = "tax_pdf_forms", package_type: str = "full") -> dict[str, Any]:
+    """Build (zip) the requested agent package variant for a use case."""
     import zipfile
 
     _require_use_case(use_case)
+    if package_type not in {"full", "limited"}:
+        raise HTTPException(status_code=400, detail="Invalid package_type. Use 'full' or 'limited'.")
+
     uc_settings = config.use_case_settings(use_case)
     agent_name = uc_settings["agent_name"]
-    package_dir = Path(config.PROJECT_ROOT) / "Agent-Packages" / agent_name
-    zip_path = package_dir / f"{agent_name}.zip"
+    folder_name = agent_name if package_type == "full" else f"{agent_name}-Limited"
+    zip_name = f"{agent_name}.zip" if package_type == "full" else f"{agent_name}-Limited.zip"
+    package_dir = Path(config.PROJECT_ROOT) / "Agent-Packages" / folder_name
+    zip_path = package_dir / zip_name
 
     required_files = ["manifest.json", "apiSpecificationFile.json", "responseRenderingTemplate.json"]
     optional_files = ["color.png", "outline.png"]
@@ -803,20 +828,26 @@ def build_agent_package(use_case: str = "tax_pdf_forms") -> dict[str, Any]:
     return {
         "ok": True,
         "agent_name": agent_name,
+        "package_type": package_type,
         "zip_path": str(zip_path),
         "files_included": files_to_zip,
     }
 
 
 @app.get("/api/test/agent-packages/download")
-def download_agent_package(use_case: str = "tax_pdf_forms"):
-    """Download the agent package zip."""
+def download_agent_package(use_case: str = "tax_pdf_forms", package_type: str = "full"):
+    """Download the requested agent package zip."""
     from fastapi.responses import FileResponse
 
     _require_use_case(use_case)
+    if package_type not in {"full", "limited"}:
+        raise HTTPException(status_code=400, detail="Invalid package_type. Use 'full' or 'limited'.")
+
     uc_settings = config.use_case_settings(use_case)
     agent_name = uc_settings["agent_name"]
-    zip_path = Path(config.PROJECT_ROOT) / "Agent-Packages" / agent_name / f"{agent_name}.zip"
+    folder_name = agent_name if package_type == "full" else f"{agent_name}-Limited"
+    zip_name = f"{agent_name}.zip" if package_type == "full" else f"{agent_name}-Limited.zip"
+    zip_path = Path(config.PROJECT_ROOT) / "Agent-Packages" / folder_name / zip_name
 
     if not zip_path.exists():
         raise HTTPException(status_code=404, detail="Package not built yet. Call /api/test/agent-packages/build first.")
@@ -824,7 +855,7 @@ def download_agent_package(use_case: str = "tax_pdf_forms"):
     return FileResponse(
         str(zip_path),
         media_type="application/zip",
-        filename=f"{agent_name}.zip",
+        filename=zip_name,
     )
 
 
