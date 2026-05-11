@@ -136,12 +136,12 @@ export class RunAllPage implements OnInit, OnDestroy {
     // Step 5: Agent Package
     await this.runStep(4, async () => {
       const r = await lastValueFrom(this.api.getAgentPackages(this.uc.activeKey).pipe(
-        catchError(err => of({ package_exists: false, files: [], agent_name: '', use_case: this.uc.activeKey, package_path: null, teams_dev_portal_url: '' } as AgentPackageInfo))
+        catchError(err => of({ packages: [], agent_name: '', use_case: this.uc.activeKey, teams_dev_portal_url: '' } as AgentPackageInfo))
       ));
       this.steps[4].durationMs = null;
       this.steps[4].detail = r;
-      const ok = r.files.length > 0;
-      if (!ok) this.steps[4].errors = ['No package files found'];
+      const ok = (r.packages || []).some(p => (p.files || []).length > 0);
+      if (!ok) this.steps[4].errors = ['No package files found for full or limited variants'];
       return ok;
     });
 

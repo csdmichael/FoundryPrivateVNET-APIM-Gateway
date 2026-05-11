@@ -126,12 +126,24 @@ FoundryPrivateVNET-APIM-Gateway/
 │   │   ├── color.png                  # 192x192 color icon
 │   │   ├── outline.png                # 32x32 outline icon
 │   │   └── Tax-PDF-Forms-Agent.zip    # Sideloadable Teams package
-│   └── Eng-Design-PPT-Agent/
+│   ├── Tax-PDF-Forms-Agent-Limited/
+│   │   ├── manifest.json
+│   │   ├── apiSpecificationFile.json
+│   │   ├── color.png                  # Distinct Limited icon set
+│   │   ├── outline.png                # Distinct Limited outline icon
+│   │   └── Tax-PDF-Forms-Agent-Limited.zip
+│   ├── Eng-Design-PPT-Agent/
 │       ├── manifest.json
 │       ├── apiSpecificationFile.json
 │       ├── color.png
 │       ├── outline.png
 │       └── Eng-Design-PPT-Agent.zip
+│   └── Eng-Design-PPT-Agent-Limited/
+│       ├── manifest.json
+│       ├── apiSpecificationFile.json
+│       ├── color.png                  # Distinct Limited icon set
+│       ├── outline.png                # Distinct Limited outline icon
+│       └── Eng-Design-PPT-Agent-Limited.zip
 │
 ├── bot-function/                  # Azure Function App — Bot Framework messaging endpoint
 ├── bot-deploy.zip                 # Pre-built bot function deployment archive
@@ -209,7 +221,7 @@ Both agents use `gpt-4.1` and are grounded exclusively through `azure_ai_search`
 
 ## Teams Agent Packages
 
-Each Foundry agent is published to Microsoft Teams as an API-based message extension. Users invoke the agent from the Teams compose box, send a question, and receive the agent's response — all routed through APIM with no bot registration required.
+Each Foundry agent is published to Microsoft Teams as an API-based message extension. Users invoke the agent from the Teams compose box, send a question, and receive the agent's response routed through APIM. The Full variant includes bot metadata for richer chat scenarios, while the Limited variant is APIM-direct without bot chat wiring.
 
 ### Package structure
 
@@ -221,17 +233,34 @@ Agent-Packages/
 │   ├── color.png                  # 192x192 color icon
 │   ├── outline.png                # 32x32 outline icon (white + transparent)
 │   └── Tax-PDF-Forms-Agent.zip
-└── Eng-Design-PPT-Agent/
-    ├── manifest.json
+├── Tax-PDF-Forms-Agent-Limited/
+│   ├── manifest.json              # Botless Limited app (APIM direct)
+│   ├── apiSpecificationFile.json
+│   ├── color.png                  # Limited-specific icon
+│   ├── outline.png                # Limited-specific outline icon
+│   └── Tax-PDF-Forms-Agent-Limited.zip
+├── Eng-Design-PPT-Agent/
+│   ├── manifest.json
+│   ├── apiSpecificationFile.json
+│   ├── color.png
+│   ├── outline.png
+│   └── Eng-Design-PPT-Agent.zip
+└── Eng-Design-PPT-Agent-Limited/
+    ├── manifest.json              # Botless Limited app (APIM direct)
     ├── apiSpecificationFile.json
-    ├── color.png
-    ├── outline.png
-    └── Eng-Design-PPT-Agent.zip
+    ├── color.png                  # Limited-specific icon
+    ├── outline.png                # Limited-specific outline icon
+    └── Eng-Design-PPT-Agent-Limited.zip
 ```
 
 ### How it works
 
 Each package uses a `composeExtensions` entry with `composeExtensionType: "apiBased"`. Teams reads the bundled `apiSpecificationFile.json` (an OpenAPI spec) to know how to call the APIM `/chat` endpoint. When the user types a question in the compose box, Teams sends a POST to `https://ai-gateway-apim-poc-my.azure-api.net/foundry-privatevnet-app/api/chat` with the `prompt` and `use_case`, and renders the response as an adaptive card.
+
+For each use case, two package variants are produced:
+
+- **Full package**: Includes bot metadata and supports full chat experience via Bot Service.
+- **Limited package**: APIM-direct package with no bot section in the manifest. This is intended for constrained chat scenarios and does not provide full bot chat experience in Teams or Copilot.
 
 ### Manifest fields
 
@@ -250,14 +279,17 @@ If you change the APIM service, update `developer.*Url`, `validDomains` in both 
 
 Teams enforces strict icon rules:
 
-| Icon | File | Size | Rules |
-|------|------|------|-------|
-| Color | `color.png` | 192x192 px | Full color, PNG format |
-| Outline | `outline.png` | 32x32 px | White and transparent only, PNG format |
+| Variant | Icon | File | Size | Rules |
+|------|------|------|------|-------|
+| Full | Color | `color.png` | 192x192 px | Full color, PNG format |
+| Full | Outline | `outline.png` | 32x32 px | White and transparent only, PNG format |
+| Limited | Color | `color.png` | 192x192 px | Distinct visual style from Full package |
+| Limited | Outline | `outline.png` | 32x32 px | Distinct white+transparent mark from Full package |
 
 ### Repackaging
 
-The packaging script zips each agent folder's `manifest.json`, `apiSpecificationFile.json`, `color.png`, and `outline.png` into a `.zip`:
+The packaging script zips each agent folder's `manifest.json`, `apiSpecificationFile.json`, `color.png`, and `outline.png` into a `.zip`.
+It now supports both Full and Limited package folders and skips any missing optional folders with a warning:
 
 ```powershell
 ./scripts/package-teams-agents.ps1
@@ -278,12 +310,12 @@ The [Teams Developer Portal](https://dev.teams.microsoft.com) lets you test and 
 
 1. Go to [https://dev.teams.microsoft.com](https://dev.teams.microsoft.com).
 2. Click **Apps** → **Import app**.
-3. Upload the `.zip` file (e.g. `Agent-Packages/Tax-PDF-Forms-Agent/Tax-PDF-Forms-Agent.zip`).
+3. Upload the `.zip` file (for example `Agent-Packages/Tax-PDF-Forms-Agent/Tax-PDF-Forms-Agent.zip` or `Agent-Packages/Tax-PDF-Forms-Agent-Limited/Tax-PDF-Forms-Agent-Limited.zip`).
 4. The portal validates the manifest, icons, schema, and OpenAPI spec. Fix any errors before proceeding.
 5. Click **Preview in Teams** to install the app for yourself.
 6. In Teams, open the compose box in any chat, click the **...** (extensions) menu, and select the agent.
 7. Type your question — Teams calls the APIM `/chat` endpoint and shows the response.
-8. Repeat for `Eng-Design-PPT-Agent.zip`.
+8. Repeat for the Engineering package and Limited variants as needed.
 
 This bypasses the Teams Admin Center approval flow and installs the app only for your account.
 

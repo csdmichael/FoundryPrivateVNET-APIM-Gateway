@@ -9,9 +9,24 @@ $packages = @(
 )
 
 foreach ($package in $packages) {
+    if (-not (Test-Path $package.Folder)) {
+        Write-Warning "Skipping package '$($package.Name)' because folder '$($package.Folder)' does not exist."
+        continue
+    }
+
     $zipPath = Join-Path $package.Folder "$($package.Name).zip"
     if (Test-Path $zipPath) {
         Remove-Item $zipPath -Force
     }
-    Compress-Archive -Path (Join-Path $package.Folder 'manifest.json'),(Join-Path $package.Folder 'color.png'),(Join-Path $package.Folder 'outline.png'),(Join-Path $package.Folder 'apiSpecificationFile.json'),(Join-Path $package.Folder 'responseRenderingTemplate.json') -DestinationPath $zipPath
+
+    $filesToZip = @('manifest.json', 'color.png', 'outline.png', 'apiSpecificationFile.json', 'responseRenderingTemplate.json') |
+        ForEach-Object { Join-Path $package.Folder $_ } |
+        Where-Object { Test-Path $_ }
+
+    if ($filesToZip.Count -eq 0) {
+        Write-Warning "Skipping package '$($package.Name)' because no package files were found in '$($package.Folder)'."
+        continue
+    }
+
+    Compress-Archive -Path $filesToZip -DestinationPath $zipPath
 }

@@ -122,8 +122,12 @@
           <!-- Step 5: Package -->
           <div *ngIf="step.num === 5 && step.detail">
             <div class="detail-row"><strong>Agent:</strong> {{ step.detail.agent_name }}</div>
-            <div class="detail-row"><strong>Package built:</strong> {{ step.detail.package_exists ? 'Yes' : 'No' }}</div>
-            <div class="detail-row"><strong>Files:</strong> {{ step.detail.files?.join(', ') }}</div>
+            <div class="detail-row"><strong>Variants:</strong> {{ step.detail.packages?.length || 0 }}</div>
+            <div class="detail-row" *ngFor="let pkg of step.detail.packages">
+              <strong>{{ pkg.package_type | titlecase }}:</strong>
+              {{ pkg.package_exists ? 'Built' : 'Not built' }}
+              <span *ngIf="pkg.files?.length"> | Files: {{ pkg.files.join(', ') }}</span>
+            </div>
           </div>
         </ion-card-content>
       </ion-card>
