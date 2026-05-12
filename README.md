@@ -147,7 +147,9 @@ FoundryPrivateVNET-APIM-Gateway/
 │
 ├── bot-function/                  # Azure Function App — Bot Framework messaging endpoint
 ├── bot-deploy.zip                 # Pre-built bot function deployment archive
-├── server.py                      # Optional local API server
+├── api/
+│   ├── server.py                  # Canonical FastAPI app entrypoint
+│   └── startup.sh                 # App Service startup script
 │
 ├── scripts/
 │   ├── deploy.ps1                 # Main deployment orchestrator
@@ -162,7 +164,7 @@ FoundryPrivateVNET-APIM-Gateway/
 │   ├── clone-foundry-agents.ps1   # Delegates to source-driven provisioning
 │   └── test-sample-prompts.ps1    # APIM smoke tests
 │
-├── api/                           # Optional App Service API layer
+├── api/                           # App Service API layer
 ├── ui/                            # Ionic/Angular testing UI — pipeline troubleshooting dashboard
 │   ├── src/app/
 │   │   ├── home/                  # Landing page — purpose, quick-start, 5-step pipeline overview

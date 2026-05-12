@@ -9,4 +9,3 @@ tfplan
 __pycache__/
 *.pyc
 .terraform.lock.hcl
-server.py
