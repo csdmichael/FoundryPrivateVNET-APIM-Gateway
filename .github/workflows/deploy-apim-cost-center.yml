@@ -1,0 +1,30 @@
+name: deploy-apim-cost-center
+
+on:
+  workflow_dispatch:
+    inputs:
+      cost_center_config_path:
+        description: Path to cost center config JSON file
+        required: false
+        default: config/cost_center_config.json
+        type: string
+
+jobs:
+  deploy-apim-cost-center:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy APIM cost center policy
+        shell: pwsh
+        run: |
+          ./scripts/deploy-apim-cost-center.ps1 -CostCenterConfigPath "${{ github.event.inputs.cost_center_config_path }}"

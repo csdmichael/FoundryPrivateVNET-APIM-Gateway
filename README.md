@@ -17,6 +17,7 @@ The primary case study is **publishing AI agents to Microsoft Teams**. Each Foun
 - [Bot Registration](#bot-registration)
 - [Test in Web Chat](#test-in-web-chat)
 - [APIM Configuration](#apim-configuration)
+- [Cost Center Based Billing](#cost-center-based-billing)
 - [AI Gateway Screenshots](#ai-gateway-screenshots)
 - [Pipeline Testing UI](#pipeline-testing-ui)
 - [Configuration](#configuration)
@@ -115,7 +116,8 @@ FoundryPrivateVNET-APIM-Gateway/
 │   ├── document_config.json       # Sample document metadata for Search index seeding
 │   ├── prompts_config.json        # Sample prompts for smoke-testing each agent
 │   ├── search_config.json         # Search index and indexer names per use case
-│   └── storage_config.json        # Storage notes (Cosmos DB-backed, no blob containers)
+│   ├── storage_config.json        # Storage notes (Cosmos DB-backed, no blob containers)
+│   └── cost_center_config.json    # Client/app ID to cost center mappings for APIM billing tags
 │
 ├── openapi/
 │   └── foundry-privatevnet-app.openapi.json  # OpenAPI spec imported into APIM
@@ -157,6 +159,7 @@ FoundryPrivateVNET-APIM-Gateway/
 │   ├── deploy-helpers.sh          # Shared bash deploy helper — ARM-based zip deploy with status polling
 │   ├── configure-apim.ps1         # APIM API/product/policy setup
 │   ├── configure-foundry-ai-gateway.ps1  # Foundry OpenAI gateway APIM surface
+│   ├── deploy-apim-cost-center.ps1  # APIM policy deployment for cost-center attribution
 │   ├── ensure-foundry-search-connection.ps1
 │   ├── package-teams-agents.ps1   # Zips each Agent-Package folder
 │   ├── export-agents-generate-packages.ps1  # Export agents from Foundry and generate Teams packages
@@ -535,6 +538,85 @@ $env:FOUNDRY_DIRECT = '1'
 ./scripts/export-agents-generate-packages.ps1
 ```
 
+## Cost Center Based Billing
+
+This solution supports showback-style billing by stamping every APIM request with cost attribution metadata before forwarding to the backend.
+
+- Tax use case (`tax_pdf_forms`) maps to cost center `12345`
+- Engineering use case (`eng_design_ppt`) maps to cost center `67890`
+- Client/app ID mappings are defined in `config/cost_center_config.json`
+
+### Architecture (based on the attached design)
+
+```mermaid
+flowchart LR
+        subgraph C[Consumers]
+            A1[App 1\nManaged Identity / Client ID]
+            A2[App 2\nManaged Identity / Client ID]
+        end
+
+        subgraph G[Enterprise Provisioned Gateway - APIM]
+            P1[Extract App ID]
+            P2[Map App ID or Use Case\nto Cost Center]
+            META[(App Metadata / Config\nClient ID to Cost Center)]
+            P1 --> P2
+            META --> P2
+        end
+
+        subgraph F[Enterprise Shared AI and Data]
+            M[Azure AI Foundry\nModel Deployments and Router]
+            HUB[(Centralized Data Hub\nLog Analytics / Azure Monitor)]
+            S[Storage and Keys]
+            M --> HUB
+            S --> HUB
+        end
+
+        subgraph R[Reporting and Visualization]
+            BI[Power BI Showback Dashboard\nSpend by Dept / Token Use / Efficiency]
+            BILL[Cost Attribution Logic]
+            ACM[Azure Cost Management]
+            ACM --> BILL --> BI
+        end
+
+        A1 -->|Request + Token| P1
+        A2 -->|Request + Token| P1
+        P2 -->|Forward Request + Cost Center| M
+        P2 -->|Client ID + Cost Center Metadata| HUB
+        HUB -->|Usage Logs + Tokens| BI
+```
+
+### APIM policy behavior
+
+The cost-center deployment script (`scripts/deploy-apim-cost-center.ps1`) applies policy logic on the app backend API to:
+
+1. Extract `clientId` from `x-client-id` header or JWT claims (`appid`/`azp`) in the bearer token.
+2. Resolve `use_case` from query string or request body.
+3. Map to a cost center by priority:
+     - exact client/app ID mapping (`client_cost_centers`)
+     - fallback by use case (`use_case_cost_centers`)
+     - fallback default (`defaults.unknown_cost_center`)
+4. Stamp and forward metadata headers:
+     - `x-client-id`
+     - `x-use-case`
+     - `x-cost-center`
+     - `x-cost-center-source`
+
+This metadata can be consumed by backend logs, Log Analytics queries, and showback reporting pipelines.
+
+### Deploy policy and mapping details
+
+Run locally:
+
+```powershell
+./scripts/deploy-apim-cost-center.ps1
+```
+
+Override config path:
+
+```powershell
+./scripts/deploy-apim-cost-center.ps1 -CostCenterConfigPath ./config/cost_center_config.json
+```
+
 ## AI Gateway Screenshots
 
 ### Foundry AI Gateway list
@@ -775,6 +857,7 @@ All runtime configuration lives in the `config/` folder. These JSON files are lo
 | `prompts_config.json` | Sample prompts grouped by query type (`keyword`, `semantic`, `agent`) for smoke-testing each agent |
 | `search_config.json` | Azure AI Search index and indexer names for each use case, used by the clone and provisioning scripts |
 | `storage_config.json` | Storage notes for the solution — document that this solution uses Cosmos DB-backed content rather than blob containers |
+| `cost_center_config.json` | Cost attribution mapping for APIM policy (`client_id` and `use_case` to cost center) |
 | `__init__.py` | Python module that loads and caches each JSON file; exposes typed accessors (`azure_resources()`, `agent_config()`, `prompts_config()`, `document_config()`, `search_config()`, `storage_config()`) used throughout the codebase |
 
 ### azure_resources.json
@@ -878,6 +961,7 @@ Current workflow split:
 - `deploy-bot.yml` for the bot function apps (deploys both `func-fdryvnetgw-tax-bot-eastus` and `func-fdryvnetgw-eng-bot-eastus` in parallel from a single job)
 - `deploy-ui.yml` for the testing UI (builds Angular production bundle, deploys to `foundry-privatevnet-ui` App Service)
 - `configure-platform.yml` for APIM and Foundry AI gateway configuration
+- `deploy-apim-cost-center.yml` for manual APIM cost-center policy deployment (manual trigger only)
 - `provision-search-agents.yml` for two-phase Search asset provisioning followed by Foundry agent provisioning
 - `package-teams-agents.yml` for Teams package zips
 

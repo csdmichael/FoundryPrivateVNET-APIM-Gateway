@@ -1,0 +1,23 @@
+{
+  "defaults": {
+    "unknown_cost_center": "00000"
+  },
+  "use_case_cost_centers": {
+    "tax_pdf_forms": "12345",
+    "eng_design_ppt": "67890"
+  },
+  "client_cost_centers": [
+    {
+      "client_id": "AAA",
+      "use_case": "tax_pdf_forms",
+      "cost_center": "12345",
+      "description": "Tax PDF Forms Teams application"
+    },
+    {
+      "client_id": "BBB",
+      "use_case": "eng_design_ppt",
+      "cost_center": "67890",
+      "description": "Engineering Design Teams application"
+    }
+  ]
+}
