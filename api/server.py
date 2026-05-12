@@ -773,6 +773,14 @@ def _make_solid_png(width: int, height: int, r: int, g: int, b: int) -> bytes:
     )
 
 
+def _bump_semver_patch(version: str) -> str:
+    """Return patch-bumped semver when possible; otherwise return input unchanged."""
+    parts = version.split(".")
+    if len(parts) != 3 or not all(p.isdigit() for p in parts):
+        return version
+    return f"{parts[0]}.{parts[1]}.{int(parts[2]) + 1}"
+
+
 def _generate_limited_package_folder(limited_dir: Path, agent_name: str, use_case: str, uc_settings: dict) -> None:
     """Auto-generate the -Limited package folder from config and full package assets."""
     limited_dir.mkdir(parents=True, exist_ok=True)
@@ -782,39 +790,33 @@ def _generate_limited_package_folder(limited_dir: Path, agent_name: str, use_cas
     # Deterministic UUID for Limited variant
     limited_id = str(uuid5(NAMESPACE_DNS, f"{agent_name}-limited"))
 
-    # Load full manifest to copy composeExtensions and other fields
+    # Load full manifest and preserve its Teams capabilities for Limited packages.
+    # We only strip bot-specific sections and override identity/branding fields.
     full_manifest_path = full_dir / "manifest.json"
     if full_manifest_path.exists():
         full_manifest = json.loads(full_manifest_path.read_text(encoding="utf-8-sig"))
-        compose_exts = full_manifest.get("composeExtensions", [])
-        schema = full_manifest.get("$schema", "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json")
-        manifest_version = full_manifest.get("manifestVersion", "devPreview")
-        version = full_manifest.get("version", "1.0.0")
-        developer = full_manifest.get("developer", {})
+        limited_manifest = dict(full_manifest)
         short_desc = full_manifest.get("description", {}).get("short", "")
     else:
-        compose_exts = []
-        schema = "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json"
-        manifest_version = "devPreview"
-        version = "1.0.0"
-        developer = {}
+        limited_manifest = {}
         short_desc = f"Foundry agent for {label}."
 
-    limited_manifest = {
-        "$schema": schema,
-        "manifestVersion": manifest_version,
-        "version": version,
-        "id": limited_id,
-        "name": {"short": f"{label} Limited", "full": f"{label} Limited (APIM-direct)"},
-        "developer": developer,
-        "description": {
-            "short": short_desc,
-            "full": f"Limited Teams package for {label}. Routes directly through Azure API Management without Bot Service.",
-        },
-        "icons": {"outline": "outline.png", "color": "color.png"},
-        "accentColor": "#CA5010",
-        "composeExtensions": compose_exts,
+    limited_manifest.pop("bots", None)
+    limited_manifest.pop("copilotAgents", None)
+    limited_manifest.setdefault("$schema", "https://developer.microsoft.com/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json")
+    limited_manifest.setdefault("manifestVersion", "devPreview")
+    limited_manifest.setdefault("version", "1.0.0")
+    limited_manifest["version"] = _bump_semver_patch(str(limited_manifest.get("version", "1.0.0")))
+    limited_manifest["id"] = limited_id
+    limited_manifest["name"] = {"short": f"{label} Limited", "full": f"{label} Limited (APIM-direct)"}
+    limited_manifest["description"] = {
+        "short": short_desc,
+        "full": f"Limited Teams package for {label}. Routes directly through Azure API Management without Bot Service.",
     }
+    limited_manifest["icons"] = {"outline": "outline.png", "color": "color.png"}
+    limited_manifest["accentColor"] = "#CA5010"
+    limited_manifest.setdefault("composeExtensions", [])
+
     (limited_dir / "manifest.json").write_text(json.dumps(limited_manifest, indent=4), encoding="utf-8")
 
     # Copy apiSpecificationFile.json and responseRenderingTemplate.json from full package
