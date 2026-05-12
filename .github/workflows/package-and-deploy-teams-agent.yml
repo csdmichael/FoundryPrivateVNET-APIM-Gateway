@@ -1,0 +1,163 @@
+name: package-and-deploy-teams-agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      use_case:
+        description: Use case package to deploy
+        required: true
+        type: choice
+        options:
+          - tax-pdf-forms
+          - eng-design-ppt
+      variant:
+        description: Agent variant
+        required: true
+        type: choice
+        options:
+          - full
+          - limited
+
+env:
+  # Required secrets:
+  # - M365_TENANT_ID
+  # - M365_CLIENT_ID
+  # - M365_CLIENT_SECRET
+  # App registration requires Microsoft Graph application permission: AppCatalog.ReadWrite.All
+  M365_TENANT_ID: ${{ secrets.M365_TENANT_ID }}
+  M365_CLIENT_ID: ${{ secrets.M365_CLIENT_ID }}
+  M365_CLIENT_SECRET: ${{ secrets.M365_CLIENT_SECRET }}
+
+jobs:
+  package-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve package folder
+        id: resolve
+        shell: pwsh
+        run: |
+          $useCase = "${{ github.event.inputs.use_case }}"
+          $variant = "${{ github.event.inputs.variant }}"
+
+          $mapping = @{
+            "tax-pdf-forms|full" = @{ Name = "Tax-PDF-Forms-Agent"; Folder = "Agent-Packages/Tax-PDF-Forms-Agent" }
+            "tax-pdf-forms|limited" = @{ Name = "Tax-PDF-Forms-Agent-Limited"; Folder = "Agent-Packages/Tax-PDF-Forms-Agent-Limited" }
+            "eng-design-ppt|full" = @{ Name = "Eng-Design-PPT-Agent"; Folder = "Agent-Packages/Eng-Design-PPT-Agent" }
+            "eng-design-ppt|limited" = @{ Name = "Eng-Design-PPT-Agent-Limited"; Folder = "Agent-Packages/Eng-Design-PPT-Agent-Limited" }
+          }
+
+          $key = "$useCase|$variant"
+          if (-not $mapping.ContainsKey($key)) {
+            throw "Unsupported selection: use_case='$useCase', variant='$variant'"
+          }
+
+          $selected = $mapping[$key]
+          if (-not (Test-Path $selected.Folder)) {
+            throw "Package folder does not exist: $($selected.Folder)"
+          }
+
+          "package_name=$($selected.Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "package_folder=$($selected.Folder)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Build package zip
+        id: package
+        shell: pwsh
+        run: |
+          $packageName = "${{ steps.resolve.outputs.package_name }}"
+          $packageFolder = "${{ steps.resolve.outputs.package_folder }}"
+
+          $zipPath = Join-Path $packageFolder "$packageName.zip"
+          if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force
+          }
+
+          $filesToZip = @(
+            'manifest.json',
+            'color.png',
+            'outline.png',
+            'apiSpecificationFile.json',
+            'responseRenderingTemplate.json'
+          ) | ForEach-Object { Join-Path $packageFolder $_ } | Where-Object { Test-Path $_ }
+
+          if ($filesToZip.Count -eq 0) {
+            throw "No package files were found in '$packageFolder'."
+          }
+
+          Compress-Archive -Path $filesToZip -DestinationPath $zipPath
+
+          if (-not (Test-Path $zipPath)) {
+            throw "Failed to create package zip at '$zipPath'."
+          }
+
+          "zip_path=$zipPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Validate required Microsoft 365 secrets
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:M365_TENANT_ID)) { throw "Missing secret: M365_TENANT_ID" }
+          if ([string]::IsNullOrWhiteSpace($env:M365_CLIENT_ID)) { throw "Missing secret: M365_CLIENT_ID" }
+          if ([string]::IsNullOrWhiteSpace($env:M365_CLIENT_SECRET)) { throw "Missing secret: M365_CLIENT_SECRET" }
+
+      - name: Deploy package to Teams tenant app catalog
+        shell: pwsh
+        run: |
+          $zipPath = "${{ steps.package.outputs.zip_path }}"
+          $manifestPath = Join-Path "${{ steps.resolve.outputs.package_folder }}" "manifest.json"
+
+          if (-not (Test-Path $manifestPath)) {
+            throw "Manifest file not found: $manifestPath"
+          }
+
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ([string]::IsNullOrWhiteSpace($manifest.id)) {
+            throw "manifest.json is missing the app id (id field)."
+          }
+
+          $tokenResponse = Invoke-RestMethod `
+            -Method POST `
+            -Uri "https://login.microsoftonline.com/$($env:M365_TENANT_ID)/oauth2/v2.0/token" `
+            -ContentType "application/x-www-form-urlencoded" `
+            -Body @{
+              client_id = $env:M365_CLIENT_ID
+              client_secret = $env:M365_CLIENT_SECRET
+              scope = "https://graph.microsoft.com/.default"
+              grant_type = "client_credentials"
+            }
+
+          if ([string]::IsNullOrWhiteSpace($tokenResponse.access_token)) {
+            throw "Failed to acquire Microsoft Graph token."
+          }
+
+          $headers = @{ Authorization = "Bearer $($tokenResponse.access_token)" }
+          $appExternalId = $manifest.id
+
+          $filterUrl = "https://graph.microsoft.com/v1.0/appCatalogs/teamsApps?`$filter=externalId eq '$appExternalId'"
+          $existing = Invoke-RestMethod -Method GET -Uri $filterUrl -Headers $headers
+
+          $zipBytes = [System.IO.File]::ReadAllBytes((Resolve-Path $zipPath))
+          $zipHeaders = @{
+            Authorization = "Bearer $($tokenResponse.access_token)"
+            "Content-Type" = "application/zip"
+          }
+
+          if ($existing.value.Count -gt 0) {
+            $teamsAppId = $existing.value[0].id
+            $uploadUrl = "https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/$teamsAppId/appDefinitions"
+            $result = Invoke-RestMethod -Method POST -Uri $uploadUrl -Headers $zipHeaders -Body $zipBytes
+            Write-Host "Updated existing Teams app. teamsAppId=$teamsAppId appDefinitionId=$($result.id)"
+          }
+          else {
+            $createUrl = "https://graph.microsoft.com/v1.0/appCatalogs/teamsApps"
+            $result = Invoke-RestMethod -Method POST -Uri $createUrl -Headers $zipHeaders -Body $zipBytes
+            Write-Host "Created new Teams app in tenant catalog. teamsAppId=$($result.id)"
+          }
+
+      - name: Upload packaged zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.resolve.outputs.package_name }}
+          path: ${{ steps.package.outputs.zip_path }}
