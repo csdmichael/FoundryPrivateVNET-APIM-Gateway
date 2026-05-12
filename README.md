@@ -164,8 +164,6 @@ FoundryPrivateVNET-APIM-Gateway/
 │   ├── package-teams-agents.ps1   # Zips each Agent-Package folder
 │   ├── export-agents-generate-packages.ps1  # Export agents from Foundry and generate Teams packages
 │   ├── provision-source-use-cases.ps1    # Source-driven Search + Foundry agent provisioning
-│   ├── clone-search-assets.ps1    # Delegates to source-driven provisioning
-│   ├── clone-foundry-agents.ps1   # Delegates to source-driven provisioning
 │   └── test-sample-prompts.ps1    # APIM smoke tests
 │
 ├── api/                           # App Service API layer
@@ -1010,15 +1008,6 @@ By default, this script treats missing Foundry RBAC as a prerequisite and fails 
 $env:AUTO_ASSIGN_FOUNDRY_ROLE = 'true'
 ./scripts/provision-source-use-cases.ps1
 ```
-
-Compatibility entrypoints still exist:
-
-```powershell
-./scripts/clone-search-assets.ps1
-./scripts/clone-foundry-agents.ps1
-```
-
-Those wrappers now delegate to the same local provisioning flow.
 
 Important network prerequisite:
 
