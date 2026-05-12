@@ -1,8 +1,8 @@
-# Foundry Private VNET APIM Gateway
+﻿# Foundry Private VNET APIM Gateway
 
 This project demonstrates **Azure API Management as an AI Gateway** in front of a fully private Azure AI Foundry deployment. All Foundry and Azure AI Search traffic is locked inside a private Azure Virtual Network; APIM sits at the VNet boundary as the single policy-enforcement and routing plane for every client request.
 
-The primary case study is **publishing AI agents to Microsoft Teams**. Each Foundry agent is surfaced as a Teams API-based message extension. Users open the compose box in any Teams chat, type a question, and receive a grounded AI response — all routed through APIM to a private Foundry project, with no additional backend App Service required.
+The primary case study is **publishing AI agents to Microsoft Teams**. Each Foundry agent is surfaced as a Teams API-based message extension. Users open the compose box in any Teams chat, type a question, and receive a grounded AI response â€” all routed through APIM to a private Foundry project, with no additional backend App Service required.
 
 ## Index
 
@@ -43,7 +43,7 @@ Traditional AI solutions add an intermediate API layer (FastAPI, Flask, App Serv
 
 ![Architecture](docs/architecture.png)
 
-### Teams → Bot → APIM → Foundry data flow
+### Teams â†’ Bot â†’ APIM â†’ Foundry data flow
 
 ![Teams Bot APIM Foundry Agent Data Flow](docs/Teams-Bot-APIM-FoundryAgent.png)
 
@@ -73,7 +73,7 @@ sequenceDiagram
     Teams-->>User: Displays answer
 ```
 
-The API-based message extension path (compose box) is shorter — Teams calls APIM `/chat` directly and renders the response as an Adaptive Card, bypassing the Bot Service entirely.
+The API-based message extension path (compose box) is shorter â€” Teams calls APIM `/chat` directly and renders the response as an Adaptive Card, bypassing the Bot Service entirely.
 
 ### Data pipeline sequence
 
@@ -85,14 +85,14 @@ The pipeline tester UI validates each hop in this sequence. When troubleshooting
 
 | Technology | Role |
 |------------|------|
-| **Azure API Management** | AI Gateway — policy enforcement, auth, request/response transformation, routing |
+| **Azure API Management** | AI Gateway â€” policy enforcement, auth, request/response transformation, routing |
 | **Azure AI Foundry** | Agent hosting, model inference (`gpt-4.1`), private endpoint access |
 | **Azure AI Search** | Grounding data store for both agents; Cosmos DB-backed indexers |
 | **Azure Cosmos DB** | Source document store for Search indexer content |
 | **Azure Bot Service** | Teams channel registration and activity relay |
 | **Azure Functions** (Python 3.11) | Bot application runtime (Linux consumption plan) |
 | **Microsoft Teams** | End-user chat interface via API-based message extensions |
-| **Ionic / Angular** | Pipeline testing UI — responsive dashboard for end-to-end troubleshooting |
+| **Ionic / Angular** | Pipeline testing UI â€” responsive dashboard for end-to-end troubleshooting |
 | **Terraform** | Infrastructure provisioning (VNet, private endpoints, DNS, APIM, bot) |
 | **Azure VNet + Private Endpoints** | Network isolation for Foundry and Search |
 | **Private DNS Zones** | Name resolution for private endpoints inside the VNet |
@@ -104,96 +104,94 @@ The pipeline tester UI validates each hop in this sequence. When troubleshooting
 
 ```
 FoundryPrivateVNET-APIM-Gateway/
-├── main.tf                        # Terraform root — VNet, private endpoints, bot, optional App Services
-├── main.tfvars.json               # Terraform variable values (region, SKUs, resource names)
-├── outputs.tf                     # Terraform outputs
-│
-├── config/
-│   ├── __init__.py                # Python module — loads and caches all config JSON files
-│   ├── agent_config.json          # Foundry agent definitions (name, model, instructions)
-│   ├── azure_resources.json       # Central resource map (APIM, Foundry, Search, Cosmos, App Services)
-│   ├── document_config.json       # Sample document metadata for Search index seeding
-│   ├── prompts_config.json        # Sample prompts for smoke-testing each agent
-│   ├── search_config.json         # Search index and indexer names per use case
-│   └── storage_config.json        # Storage notes (Cosmos DB-backed, no blob containers)
-│
-├── openapi/
-│   └── foundry-privatevnet-app.openapi.json  # OpenAPI spec imported into APIM
-│
-├── Agent-Packages/
-│   ├── Tax-PDF-Forms-Agent/
-│   │   ├── manifest.json              # Teams app manifest (v1.19)
-│   │   ├── apiSpecificationFile.json  # OpenAPI spec → APIM /chat endpoint
-│   │   ├── color.png                  # 192x192 color icon
-│   │   ├── outline.png                # 32x32 outline icon
-│   │   └── Tax-PDF-Forms-Agent.zip    # Sideloadable Teams package
-│   ├── Tax-PDF-Forms-Agent-Limited/
-│   │   ├── manifest.json
-│   │   ├── apiSpecificationFile.json
-│   │   ├── color.png                  # Distinct Limited icon set
-│   │   ├── outline.png                # Distinct Limited outline icon
-│   │   └── Tax-PDF-Forms-Agent-Limited.zip
-│   ├── Eng-Design-PPT-Agent/
-│       ├── manifest.json
-│       ├── apiSpecificationFile.json
-│       ├── color.png
-│       ├── outline.png
-│       └── Eng-Design-PPT-Agent.zip
-│   └── Eng-Design-PPT-Agent-Limited/
-│       ├── manifest.json
-│       ├── apiSpecificationFile.json
-│       ├── color.png                  # Distinct Limited icon set
-│       ├── outline.png                # Distinct Limited outline icon
-│       └── Eng-Design-PPT-Agent-Limited.zip
-│
-├── bot-function/                  # Azure Function App — Bot Framework messaging endpoint
-├── bot-deploy.zip                 # Pre-built bot function deployment archive
-├── api/
-│   ├── server.py                  # Canonical FastAPI app entrypoint
-│   └── startup.sh                 # App Service startup script
-│
-├── scripts/
-│   ├── deploy.ps1                 # Main deployment orchestrator
-│   ├── deploy-helpers.sh          # Shared bash deploy helper — ARM-based zip deploy with status polling
-│   ├── configure-apim.ps1         # APIM API/product/policy setup
-│   ├── configure-foundry-ai-gateway.ps1  # Foundry OpenAI gateway APIM surface
-│   ├── ensure-foundry-search-connection.ps1
-│   ├── package-teams-agents.ps1   # Zips each Agent-Package folder
-│   ├── export-agents-generate-packages.ps1  # Export agents from Foundry and generate Teams packages
-│   ├── provision-source-use-cases.ps1    # Source-driven Search + Foundry agent provisioning
-│   ├── clone-search-assets.ps1    # Delegates to source-driven provisioning
-│   ├── clone-foundry-agents.ps1   # Delegates to source-driven provisioning
-│   └── test-sample-prompts.ps1    # APIM smoke tests
-│
-├── api/                           # App Service API layer
-├── ui/                            # Ionic/Angular testing UI — pipeline troubleshooting dashboard
-│   ├── src/app/
-│   │   ├── home/                  # Landing page — purpose, quick-start, 5-step pipeline overview
-│   │   ├── run-all/               # Run All Tests — sequential runner, continues on failure, full report
-│   │   ├── test-search/           # Step 1: AI Search health check (doc count, fields, storage)
-│   │   ├── test-foundry/          # Step 2: Foundry Agent direct test (bypasses APIM)
-│   │   ├── test-apim/             # Step 3: APIM Gateway test (same prompt through gateway)
-│   │   ├── test-bot/              # Step 4: Bot Service test (full Teams pipeline)
-│   │   ├── agent-package/         # Step 5: Build/download Teams agent package + Dev Portal link
-│   │   ├── shared/                # Reusable KPI badges and master-detail result cards
-│   │   ├── services/              # API service, use-case service, device detection service
-│   │   ├── chat/                  # Interactive chat page
-│   │   ├── prompts/               # Sample prompt browser
-│   │   └── documents/             # Document explorer
-│   ├── server.js                  # Express static server for production
-│   ├── deploy-package.json        # Production-only package.json (Express dependency)
-│   └── package.json               # Angular/Ionic dev dependencies
-├── requirements.txt               # Python dependencies
-├── requirements-api.txt
-├── requirements-deploy.txt
-│
-└── docs/
-    ├── architecture.png           # Solution architecture diagram
-    ├── Teams-Bot-APIM-FoundryAgent.png  # End-to-end data flow diagram
-    ├── best-practices.md          # APIM + Foundry best practices
-    ├── demo-script.md             # Live walkthrough script for demos
-    ├── Prompts.txt                # Demo prompts
-    └── Screenshots/               # Portal screenshots of APIM and Foundry gateway config
+â”œâ”€â”€ main.tf                        # Terraform root â€” VNet, private endpoints, bot, optional App Services
+â”œâ”€â”€ main.tfvars.json               # Terraform variable values (region, SKUs, resource names)
+â”œâ”€â”€ outputs.tf                     # Terraform outputs
+â”‚
+â”œâ”€â”€ config/
+â”‚   â”œâ”€â”€ __init__.py                # Python module â€” loads and caches all config JSON files
+â”‚   â”œâ”€â”€ agent_config.json          # Foundry agent definitions (name, model, instructions)
+â”‚   â”œâ”€â”€ azure_resources.json       # Central resource map (APIM, Foundry, Search, Cosmos, App Services)
+â”‚   â”œâ”€â”€ document_config.json       # Sample document metadata for Search index seeding
+â”‚   â”œâ”€â”€ prompts_config.json        # Sample prompts for smoke-testing each agent
+â”‚   â”œâ”€â”€ search_config.json         # Search index and indexer names per use case
+â”‚   â””â”€â”€ storage_config.json        # Storage notes (Cosmos DB-backed, no blob containers)
+â”‚
+â”œâ”€â”€ openapi/
+â”‚   â””â”€â”€ foundry-privatevnet-app.openapi.json  # OpenAPI spec imported into APIM
+â”‚
+â”œâ”€â”€ Agent-Packages/
+â”‚   â”œâ”€â”€ Tax-PDF-Forms-Agent/
+â”‚   â”‚   â”œâ”€â”€ manifest.json              # Teams app manifest (v1.19)
+â”‚   â”‚   â”œâ”€â”€ apiSpecificationFile.json  # OpenAPI spec â†’ APIM /chat endpoint
+â”‚   â”‚   â”œâ”€â”€ color.png                  # 192x192 color icon
+â”‚   â”‚   â”œâ”€â”€ outline.png                # 32x32 outline icon
+â”‚   â”‚   â””â”€â”€ Tax-PDF-Forms-Agent.zip    # Sideloadable Teams package
+â”‚   â”œâ”€â”€ Tax-PDF-Forms-Agent-Limited/
+â”‚   â”‚   â”œâ”€â”€ manifest.json
+â”‚   â”‚   â”œâ”€â”€ apiSpecificationFile.json
+â”‚   â”‚   â”œâ”€â”€ color.png                  # Distinct Limited icon set
+â”‚   â”‚   â”œâ”€â”€ outline.png                # Distinct Limited outline icon
+â”‚   â”‚   â””â”€â”€ Tax-PDF-Forms-Agent-Limited.zip
+â”‚   â”œâ”€â”€ Eng-Design-PPT-Agent/
+â”‚       â”œâ”€â”€ manifest.json
+â”‚       â”œâ”€â”€ apiSpecificationFile.json
+â”‚       â”œâ”€â”€ color.png
+â”‚       â”œâ”€â”€ outline.png
+â”‚       â””â”€â”€ Eng-Design-PPT-Agent.zip
+â”‚   â””â”€â”€ Eng-Design-PPT-Agent-Limited/
+â”‚       â”œâ”€â”€ manifest.json
+â”‚       â”œâ”€â”€ apiSpecificationFile.json
+â”‚       â”œâ”€â”€ color.png                  # Distinct Limited icon set
+â”‚       â”œâ”€â”€ outline.png                # Distinct Limited outline icon
+â”‚       â””â”€â”€ Eng-Design-PPT-Agent-Limited.zip
+â”‚
+â”œâ”€â”€ bot-function/                  # Azure Function App â€” Bot Framework messaging endpoint
+â”œâ”€â”€ bot-deploy.zip                 # Pre-built bot function deployment archive
+â”œâ”€â”€ api/
+â”‚   â”œâ”€â”€ server.py                  # Canonical FastAPI app entrypoint
+â”‚   â””â”€â”€ startup.sh                 # App Service startup script
+â”‚
+â”œâ”€â”€ scripts/
+â”‚   â”œâ”€â”€ deploy.ps1                 # Main deployment orchestrator
+â”‚   â”œâ”€â”€ deploy-helpers.sh          # Shared bash deploy helper â€” ARM-based zip deploy with status polling
+â”‚   â”œâ”€â”€ configure-apim.ps1         # APIM API/product/policy setup
+â”‚   â”œâ”€â”€ configure-foundry-ai-gateway.ps1  # Foundry OpenAI gateway APIM surface
+â”‚   â”œâ”€â”€ ensure-foundry-search-connection.ps1
+â”‚   â”œâ”€â”€ package-teams-agents.ps1   # Zips each Agent-Package folder
+â”‚   â”œâ”€â”€ export-agents-generate-packages.ps1  # Export agents from Foundry and generate Teams packages
+â”‚   â”œâ”€â”€ provision-source-use-cases.ps1    # Source-driven Search + Foundry agent provisioning
+â”‚   â””â”€â”€ test-sample-prompts.ps1    # APIM smoke tests
+â”‚
+â”œâ”€â”€ api/                           # App Service API layer
+â”œâ”€â”€ ui/                            # Ionic/Angular testing UI â€” pipeline troubleshooting dashboard
+â”‚   â”œâ”€â”€ src/app/
+â”‚   â”‚   â”œâ”€â”€ home/                  # Landing page â€” purpose, quick-start, 5-step pipeline overview
+â”‚   â”‚   â”œâ”€â”€ run-all/               # Run All Tests â€” sequential runner, continues on failure, full report
+â”‚   â”‚   â”œâ”€â”€ test-search/           # Step 1: AI Search health check (doc count, fields, storage)
+â”‚   â”‚   â”œâ”€â”€ test-foundry/          # Step 2: Foundry Agent direct test (bypasses APIM)
+â”‚   â”‚   â”œâ”€â”€ test-apim/             # Step 3: APIM Gateway test (same prompt through gateway)
+â”‚   â”‚   â”œâ”€â”€ test-bot/              # Step 4: Bot Service test (full Teams pipeline)
+â”‚   â”‚   â”œâ”€â”€ agent-package/         # Step 5: Build/download Teams agent package + Dev Portal link
+â”‚   â”‚   â”œâ”€â”€ shared/                # Reusable KPI badges and master-detail result cards
+â”‚   â”‚   â”œâ”€â”€ services/              # API service, use-case service, device detection service
+â”‚   â”‚   â”œâ”€â”€ chat/                  # Interactive chat page
+â”‚   â”‚   â”œâ”€â”€ prompts/               # Sample prompt browser
+â”‚   â”‚   â””â”€â”€ documents/             # Document explorer
+â”‚   â”œâ”€â”€ server.js                  # Express static server for production
+â”‚   â”œâ”€â”€ deploy-package.json        # Production-only package.json (Express dependency)
+â”‚   â””â”€â”€ package.json               # Angular/Ionic dev dependencies
+â”œâ”€â”€ requirements.txt               # Python dependencies
+â”œâ”€â”€ requirements-api.txt
+â”œâ”€â”€ requirements-deploy.txt
+â”‚
+â””â”€â”€ docs/
+    â”œâ”€â”€ architecture.png           # Solution architecture diagram
+    â”œâ”€â”€ Teams-Bot-APIM-FoundryAgent.png  # End-to-end data flow diagram
+    â”œâ”€â”€ best-practices.md          # APIM + Foundry best practices
+    â”œâ”€â”€ demo-script.md             # Live walkthrough script for demos
+    â”œâ”€â”€ Prompts.txt                # Demo prompts
+    â””â”€â”€ Screenshots/               # Portal screenshots of APIM and Foundry gateway config
 ```
 
 ## Solution Overview
@@ -202,7 +200,7 @@ The deployed topology is:
 
 - **Azure AI Foundry** project with private endpoint access (no public Foundry endpoint exposed)
 - **Azure AI Search** with private endpoint access, Cosmos DB-backed indexers
-- **Azure API Management** as the public gateway — imports the OpenAPI spec, applies policies, routes to Foundry via private link
+- **Azure API Management** as the public gateway â€” imports the OpenAPI spec, applies policies, routes to Foundry via private link
 - **VNet** with dedicated subnets for APIM internal mode, private endpoints, and the bot function
 - **Private DNS zones** for Foundry and Search name resolution inside the VNet
 - **Azure Bot Service** + **Function App** for Teams chat channel (optional; API-based message extensions work without it)
@@ -217,8 +215,8 @@ Both agents are grounded on Cosmos DB-backed Azure AI Search indexes:
 | `Tax-PDF-Forms-Agent` | `tax-pdf-forms-index` | 388 |
 | `Eng-Design-PPT-Agent` | `eng-design-ppt-index` | 100 |
 
-- **Tax PDF Forms** — answers questions about US state tax exemption forms sourced from PDF content
-- **Engineering Design PPT** — answers questions about architecture decisions and milestones from engineering design presentations
+- **Tax PDF Forms** â€” answers questions about US state tax exemption forms sourced from PDF content
+- **Engineering Design PPT** â€” answers questions about architecture decisions and milestones from engineering design presentations
 
 Both agents use `gpt-4.1` and are grounded exclusively through `azure_ai_search` (no web search).
 
@@ -230,30 +228,30 @@ Each Foundry agent is published to Microsoft Teams as an API-based message exten
 
 ```
 Agent-Packages/
-├── Tax-PDF-Forms-Agent/
-│   ├── manifest.json              # Teams app manifest (v1.19)
-│   ├── apiSpecificationFile.json  # OpenAPI spec pointing to APIM /chat endpoint
-│   ├── color.png                  # 192x192 color icon
-│   ├── outline.png                # 32x32 outline icon (white + transparent)
-│   └── Tax-PDF-Forms-Agent.zip
-├── Tax-PDF-Forms-Agent-Limited/
-│   ├── manifest.json              # Botless Limited app (APIM direct)
-│   ├── apiSpecificationFile.json
-│   ├── color.png                  # Limited-specific icon
-│   ├── outline.png                # Limited-specific outline icon
-│   └── Tax-PDF-Forms-Agent-Limited.zip
-├── Eng-Design-PPT-Agent/
-│   ├── manifest.json
-│   ├── apiSpecificationFile.json
-│   ├── color.png
-│   ├── outline.png
-│   └── Eng-Design-PPT-Agent.zip
-└── Eng-Design-PPT-Agent-Limited/
-    ├── manifest.json              # Botless Limited app (APIM direct)
-    ├── apiSpecificationFile.json
-    ├── color.png                  # Limited-specific icon
-    ├── outline.png                # Limited-specific outline icon
-    └── Eng-Design-PPT-Agent-Limited.zip
+â”œâ”€â”€ Tax-PDF-Forms-Agent/
+â”‚   â”œâ”€â”€ manifest.json              # Teams app manifest (v1.19)
+â”‚   â”œâ”€â”€ apiSpecificationFile.json  # OpenAPI spec pointing to APIM /chat endpoint
+â”‚   â”œâ”€â”€ color.png                  # 192x192 color icon
+â”‚   â”œâ”€â”€ outline.png                # 32x32 outline icon (white + transparent)
+â”‚   â””â”€â”€ Tax-PDF-Forms-Agent.zip
+â”œâ”€â”€ Tax-PDF-Forms-Agent-Limited/
+â”‚   â”œâ”€â”€ manifest.json              # Botless Limited app (APIM direct)
+â”‚   â”œâ”€â”€ apiSpecificationFile.json
+â”‚   â”œâ”€â”€ color.png                  # Limited-specific icon
+â”‚   â”œâ”€â”€ outline.png                # Limited-specific outline icon
+â”‚   â””â”€â”€ Tax-PDF-Forms-Agent-Limited.zip
+â”œâ”€â”€ Eng-Design-PPT-Agent/
+â”‚   â”œâ”€â”€ manifest.json
+â”‚   â”œâ”€â”€ apiSpecificationFile.json
+â”‚   â”œâ”€â”€ color.png
+â”‚   â”œâ”€â”€ outline.png
+â”‚   â””â”€â”€ Eng-Design-PPT-Agent.zip
+â””â”€â”€ Eng-Design-PPT-Agent-Limited/
+    â”œâ”€â”€ manifest.json              # Botless Limited app (APIM direct)
+    â”œâ”€â”€ apiSpecificationFile.json
+    â”œâ”€â”€ color.png                  # Limited-specific icon
+    â”œâ”€â”€ outline.png                # Limited-specific outline icon
+    â””â”€â”€ Eng-Design-PPT-Agent-Limited.zip
 ```
 
 ### How it works
@@ -312,12 +310,12 @@ This runs automatically during `./scripts/deploy.ps1` and the GitHub Actions `po
 The [Teams Developer Portal](https://dev.teams.microsoft.com) lets you test and publish apps without tenant admin approval:
 
 1. Go to [https://dev.teams.microsoft.com](https://dev.teams.microsoft.com).
-2. Click **Apps** → **Import app**.
+2. Click **Apps** â†’ **Import app**.
 3. Upload the `.zip` file (for example `Agent-Packages/Tax-PDF-Forms-Agent/Tax-PDF-Forms-Agent.zip` or `Agent-Packages/Tax-PDF-Forms-Agent-Limited/Tax-PDF-Forms-Agent-Limited.zip`).
 4. The portal validates the manifest, icons, schema, and OpenAPI spec. Fix any errors before proceeding.
 5. Click **Preview in Teams** to install the app for yourself.
 6. In Teams, open the compose box in any chat, click the **...** (extensions) menu, and select the agent.
-7. Type your question — Teams calls the APIM `/chat` endpoint and shows the response.
+7. Type your question â€” Teams calls the APIM `/chat` endpoint and shows the response.
 8. Repeat for the Engineering package and Limited variants as needed.
 
 This bypasses the Teams Admin Center approval flow and installs the app only for your account.
@@ -388,7 +386,7 @@ Each bot uses an Entra (Azure AD) app registration for Bot Framework authenticat
 |---------|---------------|-----|
 | `signInAudience` | `AzureADMultipleOrgs` (multi-tenant) | Bot Framework Connector authenticates via `login.microsoftonline.com/botframework.com`. Single-tenant apps fail with `AADSTS700016: Application not found in directory 'Bot Framework'`. |
 | `MicrosoftAppId` | The Entra app's Application (client) ID | Set as an app setting on each bot Function App. |
-| `MicrosoftAppPassword` | A valid client secret for the Entra app | Set as an app setting. Secrets expire — check with `az ad app credential list --id <appId>`. |
+| `MicrosoftAppPassword` | A valid client secret for the Entra app | Set as an app setting. Secrets expire â€” check with `az ad app credential list --id <appId>`. |
 | `APIM_CHAT_URL` | `https://<apim-gateway>/foundry-privatevnet-app/chat` | The APIM endpoint the bot calls to get agent responses. |
 
 To fix a bot that receives messages but never replies, check:
@@ -481,7 +479,7 @@ Or add `TAX_BOT_APP_PASSWORD` and `ENG_BOT_APP_PASSWORD` as GitHub Actions secre
 
 ## Test in Web Chat
 
-Each Azure Bot registration includes a built-in **Test in Web Chat** blade in the Azure Portal. This provides a quick way to verify the full bot pipeline — Teams channel → Bot Service → Function App → APIM → Foundry — without leaving the portal or installing anything in Teams.
+Each Azure Bot registration includes a built-in **Test in Web Chat** blade in the Azure Portal. This provides a quick way to verify the full bot pipeline â€” Teams channel â†’ Bot Service â†’ Function App â†’ APIM â†’ Foundry â€” without leaving the portal or installing anything in Teams.
 
 To test a bot:
 
@@ -500,10 +498,10 @@ This is the fastest way to confirm the bot is correctly wired to APIM and Foundr
 
 The deployment configures four APIM surfaces:
 
-- **App backend API** at `{apim_gateway_url}/foundry-privatevnet-app` — imported from the OpenAPI spec, subscription-free
-- **Foundry OpenAI gateway** at `{apim_gateway_url}/002-ai-poc-private/openai` — proxies to the Foundry account with managed identity
-- **Foundry Agents gateway** at `{apim_gateway_url}/foundry-agents` — proxies the Foundry Agents/Assistants REST API with managed identity (`https://ai.azure.com` audience), enabling agent CRUD operations through APIM without caller-side credentials
-- **Teams chat endpoint** at `{apim_gateway_url}/foundry-privatevnet-app/chat` — APIM operation-level policy transforms flat `{prompt}` into OpenAI chat completions
+- **App backend API** at `{apim_gateway_url}/foundry-privatevnet-app` â€” imported from the OpenAPI spec, subscription-free
+- **Foundry OpenAI gateway** at `{apim_gateway_url}/002-ai-poc-private/openai` â€” proxies to the Foundry account with managed identity
+- **Foundry Agents gateway** at `{apim_gateway_url}/foundry-agents` â€” proxies the Foundry Agents/Assistants REST API with managed identity (`https://ai.azure.com` audience), enabling agent CRUD operations through APIM without caller-side credentials
+- **Teams chat endpoint** at `{apim_gateway_url}/foundry-privatevnet-app/chat` â€” APIM operation-level policy transforms flat `{prompt}` into OpenAI chat completions
 
 Replace `{apim_gateway_url}` with the value of `apim.gateway_url` from `config/azure_resources.json`.
 
@@ -526,7 +524,7 @@ This eliminates the need for a backend API app service. The Teams message extens
 
 ### Foundry Agents gateway
 
-The `/foundry-agents` API proxies the Foundry project's Agents/Assistants REST API through APIM. This lets `scripts/create_foundry_agent.py` and `scripts/export-agents-generate-packages.ps1` perform agent CRUD without any caller-side credentials — APIM authenticates to Foundry using its managed identity with audience `https://ai.azure.com`.
+The `/foundry-agents` API proxies the Foundry project's Agents/Assistants REST API through APIM. This lets `scripts/create_foundry_agent.py` and `scripts/export-agents-generate-packages.ps1` perform agent CRUD without any caller-side credentials â€” APIM authenticates to Foundry using its managed identity with audience `https://ai.azure.com`.
 
 To bypass APIM and call Foundry directly (e.g. from a VNet-connected machine), set `FOUNDRY_DIRECT=1`:
 
@@ -549,13 +547,13 @@ Drilling into the gateway shows its basic configuration: region `eastus`, resour
 
 ![AI Gateway config details in Foundry](docs/Screenshots/AI%20Gateway%20Config/02.%20AI%20Gateway%20config%20details%20in%20Foundry.png)
 
-### APIM — Add Foundry API endpoint
+### APIM â€” Add Foundry API endpoint
 
 In the Azure Portal, the APIM service `ai-gateway-apim-poc-my` is configured with the `002-ai-poc-private` Azure AI Service API. Client compatibility is set to **OpenAI**, and the endpoint resolves to `https://ai-gateway-apim-poc-my.azure-api.net/002-ai-poc-private/openai`. The wizard automatically activates the APIM system-assigned managed identity and assigns the **Azure AI User** role on the selected Azure AI service.
 
 ![API Management - Add Foundry API EndPoint](docs/Screenshots/AI%20Gateway%20Config/03.%20API%20Management%20-%20Add%20Foundry%20API%20EndPoint.png)
 
-### APIM — Test Foundry API
+### APIM â€” Test Foundry API
 
 The APIM Test console shows the imported `002-ai-poc-private` API with all OpenAI-compatible operations (assistants, threads, runs, messages, vector stores). The screenshot demonstrates the "Returns a list of assistants" GET operation with the full request URL routed through the APIM gateway.
 
@@ -563,11 +561,11 @@ The APIM Test console shows the imported `002-ai-poc-private` API with all OpenA
 
 ## Pipeline Testing UI
 
-The `ui/` folder contains an **Ionic / Angular / TypeScript** dashboard for end-to-end troubleshooting of the data pipeline. The testing UI and Teams Developer Portal together cover the full workflow — validate every hop in the data pipeline, build the agent package, import it into Teams or Copilot, and interact with the agent.
+The `ui/` folder contains an **Ionic / Angular / TypeScript** dashboard for end-to-end troubleshooting of the data pipeline. The testing UI and Teams Developer Portal together cover the full workflow â€” validate every hop in the data pipeline, build the agent package, import it into Teams or Copilot, and interact with the agent.
 
 ### Purpose
 
-When something breaks in the chain **AI Search → Foundry Agent → APIM → Bot Service → Teams**, this UI lets you test each hop independently with the same sample prompt, compare response times, and inspect detailed error messages — all from a single browser tab.
+When something breaks in the chain **AI Search â†’ Foundry Agent â†’ APIM â†’ Bot Service â†’ Teams**, this UI lets you test each hop independently with the same sample prompt, compare response times, and inspect detailed error messages â€” all from a single browser tab.
 
 ### Test steps
 
@@ -584,10 +582,10 @@ When something breaks in the chain **AI Search → Foundry Agent → APIM → Bo
 The **Run All Tests** page (`/run-all`) executes all 5 steps sequentially with a single click. Each step proceeds even if the previous one fails, giving a full diagnostic report with:
 
 - **Progress bar** and real-time KPI summary (passed / failed / total time)
-- **Per-step status** — PASS/FAIL badge, latency, spinning icon for the active step
-- **Expandable error details** — click any completed step to see full errors, response text, sources, and endpoints
+- **Per-step status** â€” PASS/FAIL badge, latency, spinning icon for the active step
+- **Expandable error details** â€” click any completed step to see full errors, response text, sources, and endpoints
 
-This is the recommended starting point for troubleshooting — run all tests first, then drill into individual pages for the steps that failed.
+This is the recommended starting point for troubleshooting â€” run all tests first, then drill into individual pages for the steps that failed.
 
 ### Use-case selection
 
@@ -599,19 +597,19 @@ The UI renders a device-appropriate layout:
 
 | Device | Behaviour |
 |--------|-----------|
-| **Desktop** (≥ 1200 px) | 3-column card grid, full side menu, max-width constrained content |
-| **Tablet** (768–1199 px) | 2-column card grid, collapsible menu, medium padding |
+| **Desktop** (â‰¥ 1200 px) | 3-column card grid, full side menu, max-width constrained content |
+| **Tablet** (768â€“1199 px) | 2-column card grid, collapsible menu, medium padding |
 | **Mobile** (< 768 px) | Single-column stack, hamburger menu, compact typography |
 
 ### KPIs and master-detail results
 
 Every test step displays:
 
-- **Status badge** — PASS / FAIL with colour coding
-- **Latency** — response time in milliseconds (green < 3 s, yellow < 10 s, red ≥ 10 s)
-- **Error list** — expandable section with full error messages
-- **Endpoint** — the actual URL that was called
-- **Response body** — full agent response text with source citations
+- **Status badge** â€” PASS / FAIL with colour coding
+- **Latency** â€” response time in milliseconds (green < 3 s, yellow < 10 s, red â‰¥ 10 s)
+- **Error list** â€” expandable section with full error messages
+- **Endpoint** â€” the actual URL that was called
+- **Response body** â€” full agent response text with source citations
 
 Results are shown in expandable master-detail cards. Click the header to toggle the detail pane.
 
@@ -621,13 +619,13 @@ The testing UI calls these backend endpoints (all under `/api/test/`):
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/test/search-health?use_case=…` | GET | AI Search health check with index stats |
+| `/api/test/search-health?use_case=â€¦` | GET | AI Search health check with index stats |
 | `/api/test/foundry-direct` | POST | Test Foundry Agent directly (no APIM) |
 | `/api/test/apim` | POST | Test agent via APIM gateway |
 | `/api/test/bot-service` | POST | Bot health check + APIM chat test (same path bot uses internally) |
-| `/api/test/agent-packages?use_case=…` | GET | List agent package files |
-| `/api/test/agent-packages/build?use_case=…` | POST | Build the .zip package |
-| `/api/test/agent-packages/download?use_case=…` | GET | Download the .zip |
+| `/api/test/agent-packages?use_case=â€¦` | GET | List agent package files |
+| `/api/test/agent-packages/build?use_case=â€¦` | POST | Build the .zip package |
+| `/api/test/agent-packages/download?use_case=â€¦` | GET | Download the .zip |
 
 ### Live URL
 
@@ -635,16 +633,16 @@ The deployed testing UI is available at:
 
 **[https://foundry-privatevnet-ui.azurewebsites.net](https://foundry-privatevnet-ui.azurewebsites.net)**
 
-Open the link, select a use case from the header, and walk through Steps 1–5 to test the full data flow from AI Search to Foundry Agent to APIM to Bot Service.
+Open the link, select a use case from the header, and walk through Steps 1â€“5 to test the full data flow from AI Search to Foundry Agent to APIM to Bot Service.
 
 ### Running locally
 
 ```bash
-# Terminal 1 — API backend
+# Terminal 1 â€” API backend
 cd api
 uvicorn server:app --reload --port 8000
 
-# Terminal 2 — UI dev server
+# Terminal 2 â€” UI dev server
 cd ui
 npm install
 npm start          # serves at http://localhost:4200
@@ -654,7 +652,7 @@ npm start          # serves at http://localhost:4200
 
 The UI deploys to the `foundry-privatevnet-ui` Azure App Service. A dedicated GitHub Actions workflow (`.github/workflows/deploy-ui.yml`) triggers on changes to `ui/**` or `config/**`:
 
-1. `npm ci` + `ng build --configuration production` → produces `www/`
+1. `npm ci` + `ng build --configuration production` â†’ produces `www/`
 2. Packages `www/`, `server.js`, and `deploy-package.json` into a deploy zip
 3. Deploys via ARM-based zip deploy (`az webapp deploy`) with status polling through `scripts/deploy-helpers.sh`
 4. Verifies the site returns HTTP 2xx with retry logic
@@ -667,97 +665,97 @@ All deployment workflows share `scripts/deploy-helpers.sh` which handles the com
 
 ### Screenshots
 
-#### Step 1 — Home Screen
+#### Step 1 â€” Home Screen
 
 The testing UI home page shows the purpose of the app, a quick-start guide, and an overview of the 5-step pipeline test. Select a use case from the header to begin.
 
 ![Home Screen](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/01.%20Home%20Screen.png)
 
-#### Step 2 — Run all tests in sequence
+#### Step 2 â€” Run all tests in sequence
 
 Click **Run All Tests** to execute all 5 pipeline steps sequentially. Each step proceeds even if the previous one fails, giving a full diagnostic report.
 
 ![Run all tests in sequence](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/02.%20Run%20all%20tests%20in%20sequence.png)
 
-#### Step 3 — Track flow of chat request across tiers
+#### Step 3 â€” Track flow of chat request across tiers
 
-The run-all view shows real-time progress as each tier is tested: AI Search → Foundry Agent → APIM Gateway → Bot Service → Agent Package.
+The run-all view shows real-time progress as each tier is tested: AI Search â†’ Foundry Agent â†’ APIM Gateway â†’ Bot Service â†’ Agent Package.
 
 ![Track Flow of Chat Request across Tiers](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/03.%20Track%20Flow%20of%20Chat%20Request%20across%20Tiers.png)
 
-#### Step 4 — Test completed and agent package ready
+#### Step 4 â€” Test completed and agent package ready
 
 Once all steps complete, the summary shows PASS/FAIL status, latency, and total time for each tier. The agent package is ready to download.
 
 ![Test Completed and Agent Package ready](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/04.%20Test%20Completed%20and%20Agent%20Package%20ready.png)
 
-#### Step 5 — Drill through results or copy errors
+#### Step 5 â€” Drill through results or copy errors
 
 Expand any completed step to see full error messages, response text, source citations, and the endpoint that was called. Copy error details for troubleshooting.
 
 ![Drill through results or copy errors if any](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/05.%20Drill%20through%20results%20or%20copy%20errors%20if%20any.png)
 
-#### Step 6 — Build agent package and download zip
+#### Step 6 â€” Build agent package and download zip
 
 The Agent Package step builds the Teams `.zip` package on-demand and provides a download link. The package contains the manifest, OpenAPI spec, and icons.
 
 ![Build Agent Package and download Zip](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/06.%20Build%20Agent%20Package%20and%20download%20Zip.png)
 
-#### Step 7 — Open Teams Dev Portal
+#### Step 7 â€” Open Teams Dev Portal
 
 Click the **Teams Developer Portal** link to open [dev.teams.microsoft.com](https://dev.teams.microsoft.com) where you import and manage your agent apps.
 
 ![Open Teams Dev Portal](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/07.%20Open%20Teams%20Dev%20Portal.png)
 
-#### Step 8 — Import app zip package
+#### Step 8 â€” Import app zip package
 
-In the Teams Developer Portal, go to **Apps** → **Import app** and upload the `.zip` package from `Agent-Packages/<AgentName>/<AgentName>.zip`.
+In the Teams Developer Portal, go to **Apps** â†’ **Import app** and upload the `.zip` package from `Agent-Packages/<AgentName>/<AgentName>.zip`.
 
-![Import App — Zip Package](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/08.%20import%20App%20-%20Zip%20Package.png)
+![Import App â€” Zip Package](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/08.%20import%20App%20-%20Zip%20Package.png)
 
-#### Step 9 — Preview in Teams
+#### Step 9 â€” Preview in Teams
 
 After the manifest passes validation, click **Preview in Teams** to sideload the app for your account. This installs the agent without tenant admin approval.
 
 ![Preview in Teams](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/09.%20Preview%20in%20Teams.png)
 
-#### Step 10 — Open in Teams
+#### Step 10 â€” Open in Teams
 
 Teams launches and prompts you to add the app. Click **Add** to install the agent as a compose extension in your Teams client.
 
 ![Open in Teams](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/10.%20Open%20in%20Teams.png)
 
-#### Step 11 — Open in Teams or Copilot
+#### Step 11 â€” Open in Teams or Copilot
 
 You can choose to open the agent in Microsoft Teams or in Microsoft Copilot. Both surfaces use the same APIM-backed `/chat` endpoint.
 
 ![Open in Teams or Copilot](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/11.%20Open%20in%20Teams%20or%20Copilot.png)
 
-#### Step 12 — Type a question or use a suggested prompt
+#### Step 12 â€” Type a question or use a suggested prompt
 
 In the compose box, type your question or pick one of the suggested prompts. The agent calls the APIM gateway, which routes to the private Foundry project for inference.
 
 ![Type a question or use suggested prompt](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/12.%20Type%20a%20question%20or%20use%20suggested%20prompt.png)
 
-#### Step 13 — Agent responds in Microsoft Copilot
+#### Step 13 â€” Agent responds in Microsoft Copilot
 
 When invoked from Copilot, the agent returns a grounded response rendered inline in the Copilot chat experience.
 
 ![Agent responds in Copilot](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/13.%20Agent%20responds%20in%20Copilot.png)
 
-#### Step 14 — Agent responds in Microsoft Teams
+#### Step 14 â€” Agent responds in Microsoft Teams
 
 When invoked from Teams, the response is displayed as an adaptive card in the compose extension results. The card includes the agent's answer grounded on the private Search index.
 
 ![Agent responds in MS Teams](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/14.%20Agent%20responds%20in%20MS%20Teams.png)
 
-#### Step 15 — View existing prompts
+#### Step 15 â€” View existing prompts
 
 The Prompts page shows the full sample prompt catalog grouped by query type. Use these prompts for repeatable testing across both agents.
 
 ![View Existing Prompts](docs/Screenshots/GUI%20for%20Testing%20Data%20Flow/15.%20View%20Existing%20Prompts.png)
 
-#### Step 16 — Eng Design Agent
+#### Step 16 â€” Eng Design Agent
 
 Switch the use-case selector to **Eng Design PPT** to test the engineering design agent. The same pipeline steps apply with the engineering-specific search index and prompts.
 
@@ -769,32 +767,32 @@ All runtime configuration lives in the `config/` folder. These JSON files are lo
 
 | File | Purpose |
 |------|---------|
-| `agent_config.json` | Foundry agent definitions — one entry per use case with `name`, `model_deployment`, and `instructions` |
+| `agent_config.json` | Foundry agent definitions â€” one entry per use case with `name`, `model_deployment`, and `instructions` |
 | `azure_resources.json` | Central map of all Azure resource IDs, endpoints, bot function app names, and per-use-case paths (APIM, Foundry, Search, Cosmos DB, App Services) |
 | `document_config.json` | Sample document metadata (filename, doc_id, title) used to seed and validate each use-case Search index |
 | `prompts_config.json` | Sample prompts grouped by query type (`keyword`, `semantic`, `agent`) for smoke-testing each agent |
 | `search_config.json` | Azure AI Search index and indexer names for each use case, used by the clone and provisioning scripts |
-| `storage_config.json` | Storage notes for the solution — document that this solution uses Cosmos DB-backed content rather than blob containers |
+| `storage_config.json` | Storage notes for the solution â€” document that this solution uses Cosmos DB-backed content rather than blob containers |
 | `__init__.py` | Python module that loads and caches each JSON file; exposes typed accessors (`azure_resources()`, `agent_config()`, `prompts_config()`, `document_config()`, `search_config()`, `storage_config()`) used throughout the codebase |
 
 ### azure_resources.json
 
 This is the primary config file. It contains:
 
-- `subscription_id`, `resource_group`, `location` — target Azure environment
-- `apim` — APIM service resource ID, gateway URL, API path, product name, and API names (app backend and Foundry gateway)
-- `foundry` — Foundry account name, resource ID, project endpoint, source project endpoint, and Search connection name
-- `search` — target and source Search service names, resource IDs, and endpoint
-- `cosmosdb` — Cosmos DB account name, endpoint, resource ID, database, and container
-- `app_services` — optional API and UI App Service names and URLs (only used when `deploy_api`/`deploy_ui` are enabled)
-- `use_cases` — per-use-case label, agent name, APIM agent path, and Search asset names
+- `subscription_id`, `resource_group`, `location` â€” target Azure environment
+- `apim` â€” APIM service resource ID, gateway URL, API path, product name, and API names (app backend and Foundry gateway)
+- `foundry` â€” Foundry account name, resource ID, project endpoint, source project endpoint, and Search connection name
+- `search` â€” target and source Search service names, resource IDs, and endpoint
+- `cosmosdb` â€” Cosmos DB account name, endpoint, resource ID, database, and container
+- `app_services` â€” optional API and UI App Service names and URLs (only used when `deploy_api`/`deploy_ui` are enabled)
+- `use_cases` â€” per-use-case label, agent name, APIM agent path, and Search asset names
 
 ### agent_config.json
 
 Defines the two Foundry agents provisioned into the private Foundry project:
 
-- `Tax-PDF-Forms-Agent` — uses `gpt-4.1`, grounded on the tax PDF Search index
-- `Eng-Design-PPT-Agent` — uses `gpt-4.1`, grounded on the engineering design PPT Search index
+- `Tax-PDF-Forms-Agent` â€” uses `gpt-4.1`, grounded on the tax PDF Search index
+- `Eng-Design-PPT-Agent` â€” uses `gpt-4.1`, grounded on the engineering design PPT Search index
 
 > **Note:** All APIM and Foundry endpoints in `azure_resources.json` are deployed inside a private Azure VNet. They are not reachable from the public internet. Replace the values in `azure_resources.json` with your own resource details before deploying to a different environment.
 
@@ -930,8 +928,6 @@ $env:AUTO_ASSIGN_FOUNDRY_ROLE = 'true'
 Compatibility entrypoints still exist:
 
 ```powershell
-./scripts/clone-search-assets.ps1
-./scripts/clone-foundry-agents.ps1
 ```
 
 Those wrappers now delegate to the same local provisioning flow.
@@ -942,7 +938,7 @@ Important network prerequisite:
 
 ## Sample Prompts and Testing
 
-Both agents use only `azure_ai_search` as their grounding tool — no web search is allowed. Each agent queries its dedicated index on `aisearch-poc-myaacoub`:
+Both agents use only `azure_ai_search` as their grounding tool â€” no web search is allowed. Each agent queries its dedicated index on `aisearch-poc-myaacoub`:
 
 | Agent | Search Index | Documents |
 |-------|-------------|-----------|
@@ -951,10 +947,10 @@ Both agents use only `azure_ai_search` as their grounding tool — no web search
 
 The prompt sets below are intentionally anchored to the sample documents tracked in `config/document_config.json`:
 
-- `lq_tax_exemption_IN_001_yellow.pdf` — Indiana Tax Exemption Certificate
-- `lq_tax_exemption_WV_002_red.pdf` — West Virginia Resale Certificate
-- `engineering_design_review_001.pptx` — Engineering Design Review
-- `solution_architecture_update_002.pptx` — Solution Architecture Update
+- `lq_tax_exemption_IN_001_yellow.pdf` â€” Indiana Tax Exemption Certificate
+- `lq_tax_exemption_WV_002_red.pdf` â€” West Virginia Resale Certificate
+- `engineering_design_review_001.pptx` â€” Engineering Design Review
+- `solution_architecture_update_002.pptx` â€” Solution Architecture Update
 
 For the full live walkthrough, use [docs/demo-script.md](docs/demo-script.md). For a copy/paste prompt-only version, use [docs/Prompts.txt](docs/Prompts.txt).
 
@@ -1022,3 +1018,5 @@ Validate region, SKU, and existing resource assumptions in [main.tfvars.json](ma
 - [APIM and Foundry best practices](docs/best-practices.md) - Project-specific implementation guidance and operational recommendations.
 - [Demo walkthrough script](docs/demo-script.md) - End-to-end demo flow for validating the deployed architecture.
 - [Sample prompt catalog](docs/Prompts.txt) - Prompt set for repeatable smoke testing across use cases.
+
+
