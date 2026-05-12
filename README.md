@@ -13,6 +13,7 @@ The primary case study is **publishing AI agents to Microsoft Teams**. Each Foun
 - [Solution Overview](#solution-overview)
 - [Use Cases](#use-cases)
 - [Teams Agent Packages](#teams-agent-packages)
+- [Teams Chat Screenshots](#teams-chat-screenshots)
 - [Bot Registration](#bot-registration)
 - [Test in Web Chat](#test-in-web-chat)
 - [APIM Configuration](#apim-configuration)
@@ -342,6 +343,29 @@ Install the [Teams Toolkit](https://marketplace.visualstudio.com/items?itemName=
 | Unsupported schema type (arrays) | Request body uses array types | Flatten to simple string properties; use APIM policy to transform into arrays |
 | `apiResponseRenderingTemplateFile` not defined | Wrong manifest schema version | Use `devPreview` manifest version |
 | `previewCardTemplate` missing | Response template missing required field | Add `previewCardTemplate` with at least a `title` |
+
+## Teams Chat Screenshots
+
+The screenshots below compare the two Teams experiences side by side:
+
+- **Limited chat** is botless and APIM-direct. It is designed for a single prompt and response flow, which keeps the interaction lightweight when you do not need a full chat session.
+- **Full chat** adds Azure Bot Service and the Function App layer, so the same agent can support a richer, multi-turn conversation experience in Teams.
+
+### Package comparison
+
+![Teams apps limited vs full](docs/Screenshots/TeamsApp_FullChat_vs_LimitedChat/1.%20Apps_Limited_vs_Full.png)
+
+### Limited chat: no bot service
+
+![Limited chat no bot](docs/Screenshots/TeamsApp_FullChat_vs_LimitedChat/2.%20Limited_NoBot.png)
+
+### Full chat: bot service enabled
+
+![Full chat has bot](docs/Screenshots/TeamsApp_FullChat_vs_LimitedChat/3.%20Full_Has_Bot.png)
+
+### Full vs limited summary
+
+![TeamsApp FullChat vs LimitedChat](docs/Screenshots/TeamsApp_FullChat_vs_LimitedChat/4.%20TeamsApp_FullChat_vs_LimitedChat.png)
 
 ## Bot Registration
 
