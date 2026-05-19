@@ -391,6 +391,13 @@ resource "azurerm_linux_web_app" "api" {
   https_only          = true
   tags                = var.tags
 
+  # APIM (BasicV2) has no VNet integration and reaches this backend over its
+  # public outbound IP. Disabling public network access (without a private
+  # endpoint reachable by APIM) makes the backend return 403 to APIM. Keep
+  # public access enabled; lock down further with IP restrictions to APIM's
+  # outbound IPs if needed.
+  public_network_access_enabled = true
+
   lifecycle {
     precondition {
       condition     = !local.use_existing_app_service_plan || lower(data.azurerm_service_plan.existing[0].location) == lower(var.location)
