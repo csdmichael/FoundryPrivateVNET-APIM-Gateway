@@ -5,9 +5,12 @@ on:
   push:
     branches:
       - main
+    # Only deploy when the UI's own code or the config it consumes changes.
+    # The UI build reads just config/azure_resources.json; markdown never deploys.
     paths:
       - 'ui/**'
-      - 'config/**'
+      - '!ui/**/*.md'
+      - 'config/azure_resources.json'
       - '.github/workflows/deploy-ui.yml'
 
 jobs:

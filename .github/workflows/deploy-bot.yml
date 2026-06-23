@@ -5,9 +5,14 @@ on:
   push:
     branches:
       - main
+    # Only deploy when the bot's own code or the shared config it bundles changes.
+    # Excludes the function-app-only config and any markdown so docs never deploy.
     paths:
       - 'bot-function/**'
+      - '!bot-function/**/*.md'
       - 'config/**'
+      - '!config/function_app_config.json'
+      - '!config/**/*.md'
       - '.github/workflows/deploy-bot.yml'
 
 jobs:

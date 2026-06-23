@@ -5,9 +5,14 @@ on:
   push:
     branches:
       - main
+    # Only deploy when the API's own code or the shared config it bundles changes.
+    # Excludes the function-app-only config and any markdown so docs never deploy.
     paths:
       - 'api/**'
+      - '!api/**/*.md'
       - 'config/**'
+      - '!config/function_app_config.json'
+      - '!config/**/*.md'
       - 'openapi/**'
       - 'requirements-api.txt'
       - '.github/workflows/deploy-api.yml'
