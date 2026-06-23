@@ -198,16 +198,28 @@ if ($currentVnet -and ($currentVnet -replace '\s','' -eq ($intSubnetId -replace 
 # ---------------------------------------------------------------------------
 if (-not $SkipDeploy) {
     Write-Host "==> Stage 5: deploy function code" -ForegroundColor Cyan
-    $tempRoot = [System.IO.Path]::GetTempPath()
-    $stage = Join-Path $tempRoot "func-data-$(Get-Random)"
-    $zipPath = Join-Path $tempRoot "func-data-app.zip"
-    if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-    Copy-Item -Recurse -Force .\function-app $stage
-    Get-ChildItem -Recurse -Path $stage -Include __pycache__,*.pyc,local.settings.json -Force |
-        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-    # Build a Linux-friendly (POSIX path) zip with Python (python on Windows, python3 on Linux CI).
-    $pythonExe = if (Get-Command python -ErrorAction SilentlyContinue) { 'python' } else { 'python3' }
-    $py = @"
+    # Code is pushed over the SCM/Kudu endpoint. Once the app is locked to
+    # publicNetworkAccess=Disabled (Stage 7), that endpoint resolves to a private
+    # IP that a public CI runner cannot reach. Detect that up front and skip the
+    # push with a clear warning rather than hard-failing the (otherwise idempotent)
+    # infra reconciliation. Fresh deploys still push code because Stage 7 has not
+    # run yet; code updates to a locked app must run from a VNet-connected host.
+    $funcPublic = Invoke-AzProbe { az functionapp show -g $resourceGroup -n $funcName --query publicNetworkAccess -o tsv }
+    if ($funcPublic -eq 'Disabled') {
+        Write-Host "    SKIPPED: '$funcName' has publicNetworkAccess=Disabled; its SCM endpoint is private." -ForegroundColor Yellow
+        Write-Host "    Deploy code from a host inside vnet-fdryvnetgw-eastus (self-hosted runner) or" -ForegroundColor Yellow
+        Write-Host "    temporarily re-enable public access, push, then disable again." -ForegroundColor Yellow
+    } else {
+        $tempRoot = [System.IO.Path]::GetTempPath()
+        $stage = Join-Path $tempRoot "func-data-$(Get-Random)"
+        $zipPath = Join-Path $tempRoot "func-data-app.zip"
+        if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+        Copy-Item -Recurse -Force .\function-app $stage
+        Get-ChildItem -Recurse -Path $stage -Include __pycache__,*.pyc,local.settings.json -Force |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        # Build a Linux-friendly (POSIX path) zip with Python (python on Windows, python3 on Linux CI).
+        $pythonExe = if (Get-Command python -ErrorAction SilentlyContinue) { 'python' } else { 'python3' }
+        $py = @"
 import os, zipfile
 stage = r'''$stage'''
 out = r'''$zipPath'''
@@ -218,10 +230,11 @@ with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
             zf.write(fp, os.path.relpath(fp, stage).replace('\\', '/'))
 print(out)
 "@
-    $py | & $pythonExe -
-    Invoke-AzWrite { az functionapp deployment source config-zip -g $resourceGroup -n $funcName --src $zipPath --build-remote true } 'zip deploy'
-    Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Host "    deployed $zipPath" -ForegroundColor Green
+        $py | & $pythonExe -
+        Invoke-AzWrite { az functionapp deployment source config-zip -g $resourceGroup -n $funcName --src $zipPath --build-remote true } 'zip deploy'
+        Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "    deployed $zipPath" -ForegroundColor Green
+    }
 } else {
     Write-Host "==> Stage 5: skipped (-SkipDeploy)" -ForegroundColor Yellow
 }
