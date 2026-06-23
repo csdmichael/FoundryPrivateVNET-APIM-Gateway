@@ -19,6 +19,31 @@ param()
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot\..
 
+# Run a mutating az command that may print warnings to stderr (which would abort the
+# script under ErrorActionPreference='Stop'). Tolerates stderr, throws only on a
+# non-zero exit code.
+function Invoke-AzWrite {
+    param([Parameter(Mandatory)][scriptblock]$Cmd, [string]$What = 'az command')
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $Cmd 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "$What failed (exit $LASTEXITCODE)" }
+    } finally { $ErrorActionPreference = $prev }
+}
+
+# Probe that returns output or $null without throwing on a "not found" stderr write.
+function Invoke-AzProbe {
+    param([Parameter(Mandatory)][scriptblock]$Probe)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & $Probe 2>$null
+        if ($LASTEXITCODE -eq 0 -and $out) { return ($out | Select-Object -First 1) }
+        return $null
+    } finally { $ErrorActionPreference = $prev }
+}
+
 $cfg = Get-Content .\config\function_app_config.json -Raw | ConvertFrom-Json
 $res = Get-Content .\config\azure_resources.json -Raw | ConvertFrom-Json
 
@@ -39,13 +64,9 @@ $apiSpec        = Resolve-Path .\function-app\openapi.json
 az account set --subscription $subscriptionId | Out-Null
 
 Write-Host "==> Importing '$apiDisplay' into APIM '$apimName' at /$apiPath" -ForegroundColor Cyan
-az apim api import --resource-group $resourceGroup --service-name $apimName `
-    --path $apiPath --api-id $apiId --display-name $apiDisplay `
-    --specification-format OpenApiJson --specification-path $apiSpec `
-    --service-url $backendUrl | Out-Null
+Invoke-AzWrite { az apim api import --resource-group $resourceGroup --service-name $apimName --path $apiPath --api-id $apiId --display-name $apiDisplay --specification-format OpenApiJson --specification-path $apiSpec --service-url $backendUrl } 'apim api import'
 
-az apim api update --resource-group $resourceGroup --service-name $apimName `
-    --api-id $apiId --subscription-required $subRequired.ToString().ToLower() | Out-Null
+Invoke-AzWrite { az apim api update --resource-group $resourceGroup --service-name $apimName --api-id $apiId --subscription-required $subRequired.ToString().ToLower() } 'apim api update'
 
 Write-Host "==> Applying API policy (backend rewrite + CORS)" -ForegroundColor Cyan
 $policyXml = @"
@@ -72,17 +93,20 @@ $policyXml = @"
 </policies>
 "@
 
+# Write the request body WITHOUT a BOM: az reads it as utf-8 and a BOM breaks it.
 $policyBodyPath = Join-Path ([System.IO.Path]::GetTempPath()) 'func-apim-policy.json'
-@{ properties = @{ format = 'xml'; value = $policyXml } } | ConvertTo-Json -Depth 6 | Set-Content -Path $policyBodyPath -Encoding UTF8
-az rest --method PUT `
-    --url "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.ApiManagement/service/$apimName/apis/$apiId/policies/policy?api-version=2024-05-01" `
-    --body "@$policyBodyPath" | Out-Null
-Remove-Item $policyBodyPath -Force -ErrorAction SilentlyContinue
+$policyJson = @{ properties = @{ format = 'xml'; value = $policyXml } } | ConvertTo-Json -Depth 6
+[System.IO.File]::WriteAllText($policyBodyPath, $policyJson, (New-Object System.Text.UTF8Encoding($false)))
+# az rest prints the response body to stdout; on Windows that crashes on the BOM in
+# the returned policy XML (cp1252 codec). Route the response to a file with --output-file.
+$policyRespPath = Join-Path ([System.IO.Path]::GetTempPath()) 'func-apim-policy-resp.json'
+Invoke-AzWrite { az rest --method PUT --url "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.ApiManagement/service/$apimName/apis/$apiId/policies/policy?api-version=2024-05-01" --body "@$policyBodyPath" --output-file $policyRespPath } 'apim api policy PUT'
+Remove-Item $policyBodyPath, $policyRespPath -Force -ErrorAction SilentlyContinue
 
-$existingProduct = az apim product show --resource-group $resourceGroup --service-name $apimName --product-id $productId 2>$null
+$existingProduct = Invoke-AzProbe { az apim product show --resource-group $resourceGroup --service-name $apimName --product-id $productId --query id -o tsv }
 if ($existingProduct) {
     Write-Host "==> Adding API to product '$productId'" -ForegroundColor Cyan
-    az apim product api add --resource-group $resourceGroup --service-name $apimName --product-id $productId --api-id $apiId | Out-Null
+    Invoke-AzWrite { az apim product api add --resource-group $resourceGroup --service-name $apimName --product-id $productId --api-id $apiId } 'apim product api add'
 }
 
 $gateway = $res.apim.gateway_url.TrimEnd('/')

@@ -24,8 +24,9 @@
       "swagger_ui": "api/swagger"
     }
   },
+  "comment_hosting_plan_quota": "eastus App Service quota was 0 ('Total VMs') on first attempt but is now available (confirmed 2026-06-23): F1, B1, B2, B3 all create successfully in eastus. Using B1 (cheapest tier supporting regional VNet integration + Always On + inbound private endpoint; F1 Free supports none of those).",
   "hosting_plan": {
-    "comment": "All pre-existing App Service plans are in West US 2; private VNet integration requires the plan in East US, so reuse is not viable. Set reuse_existing=true and reuse_plan_name only if an East US plan (Basic B1 or higher / Elastic Premium) already exists.",
+    "comment": "All pre-existing App Service plans are in West US 2; private VNet integration requires the plan in East US, so reuse is not viable. eastus Basic quota confirmed available -- B1 is the smallest tier that supports VNet integration, Always On, and a private endpoint. Set reuse_existing=true and reuse_plan_name only if an East US plan already exists.",
     "name": "asp-fdryvnetgw-data-eastus",
     "sku": "B1",
     "tier": "Basic",

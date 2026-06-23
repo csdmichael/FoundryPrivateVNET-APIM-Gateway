@@ -35,6 +35,34 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot\..
 
+# Safe resource-existence probe: runs the az probe scriptblock and returns its value
+# or $null without throwing on a "not found" stderr write. Windows PowerShell 5.1
+# turns native-command stderr into a terminating error under ErrorActionPreference
+# 'Stop'; pwsh on Linux does not.
+function Invoke-AzProbe {
+    param([Parameter(Mandatory)][scriptblock]$Probe)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & $Probe 2>$null
+        if ($LASTEXITCODE -eq 0 -and $out) { return ($out | Select-Object -First 1) }
+        return $null
+    } finally { $ErrorActionPreference = $prev }
+}
+
+# Run a mutating az command that may print warnings to stderr (which would abort the
+# script under ErrorActionPreference='Stop'). Tolerates stderr, throws only on a
+# non-zero exit code.
+function Invoke-AzWrite {
+    param([Parameter(Mandatory)][scriptblock]$Cmd, [string]$What = 'az command')
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $Cmd 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "$What failed (exit $LASTEXITCODE)" }
+    } finally { $ErrorActionPreference = $prev }
+}
+
 Write-Host '==> Loading configuration' -ForegroundColor Cyan
 $cfg = Get-Content .\config\function_app_config.json -Raw | ConvertFrom-Json
 
@@ -72,7 +100,7 @@ az account set --subscription $subscriptionId | Out-Null
 # Stage 1 - Storage account
 # ---------------------------------------------------------------------------
 Write-Host "==> Stage 1: storage account '$stName'" -ForegroundColor Cyan
-$stExists = az storage account show -g $resourceGroup -n $stName --query id -o tsv 2>$null
+$stExists = Invoke-AzProbe { az storage account show -g $resourceGroup -n $stName --query id -o tsv }
 if (-not $stExists) {
     az storage account create -g $resourceGroup -n $stName -l $location `
         --sku $stSku --kind $cfg.storage_account.kind `
@@ -96,7 +124,7 @@ if ($reusePlan -and $reusePlanName) {
     }
 } else {
     $planResolved = $planName
-    $planExists = az appservice plan show -g $resourceGroup -n $planResolved --query id -o tsv 2>$null
+    $planExists = Invoke-AzProbe { az appservice plan show -g $resourceGroup -n $planResolved --query id -o tsv }
     if (-not $planExists) {
         az appservice plan create -g $resourceGroup -n $planResolved -l $location `
             --sku $planSku --is-linux | Out-Null
@@ -110,14 +138,27 @@ if ($reusePlan -and $reusePlanName) {
 # Stage 3 - Function App
 # ---------------------------------------------------------------------------
 Write-Host "==> Stage 3: function app '$funcName'" -ForegroundColor Cyan
-$funcExists = az functionapp show -g $resourceGroup -n $funcName --query id -o tsv 2>$null
+$funcExists = Invoke-AzProbe { az functionapp show -g $resourceGroup -n $funcName --query id -o tsv }
 if (-not $funcExists) {
+    # Configure VNet integration at create time: the content storage account has
+    # public access disabled + private endpoints, so the app must reach it over the
+    # VNet from the start (otherwise create fails with "storage has networking
+    # restrictions ... your app will not start"). Pass the FULL subnet resource id so
+    # az doesn't emit the "assuming subnet resource group" warning (which would abort
+    # the script under ErrorActionPreference='Stop').
+    $intSubnetId = az network vnet subnet show -g $resourceGroup --vnet-name $vnetName -n $intSubnet --query id -o tsv
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     az functionapp create -g $resourceGroup -n $funcName `
         --plan $planResolved --storage-account $stName `
         --runtime $runtime --runtime-version $runtimeVersion `
         --functions-version ($funcVersion -replace '~','') `
-        --os-type Linux --assign-identity '[system]' | Out-Null
-    Write-Host "    created" -ForegroundColor Green
+        --os-type Linux --assign-identity '[system]' `
+        --subnet $intSubnetId 2>&1 | Out-Null
+    $createExit = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    if ($createExit -ne 0) { throw "az functionapp create failed (exit $createExit)" }
+    Write-Host "    created (VNet-integrated with $intSubnet)" -ForegroundColor Green
 } else {
     Write-Host "    exists, reusing" -ForegroundColor Yellow
 }
@@ -139,8 +180,18 @@ az functionapp config set -g $resourceGroup -n $funcName --vnet-route-all-enable
 # ---------------------------------------------------------------------------
 Write-Host "==> Stage 4: VNet integration ($intSubnet)" -ForegroundColor Cyan
 $intSubnetId = az network vnet subnet show -g $resourceGroup --vnet-name $vnetName -n $intSubnet --query id -o tsv
-az functionapp vnet-integration add -g $resourceGroup -n $funcName --vnet $vnetName --subnet $intSubnet | Out-Null
-Write-Host "    integrated with $intSubnetId" -ForegroundColor Green
+$currentVnet = Invoke-AzProbe { az functionapp show -g $resourceGroup -n $funcName --query virtualNetworkSubnetId -o tsv }
+if ($currentVnet -and ($currentVnet -replace '\s','' -eq ($intSubnetId -replace '\s',''))) {
+    Write-Host "    already integrated with $intSubnet" -ForegroundColor Yellow
+} else {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    az functionapp vnet-integration add -g $resourceGroup -n $funcName --vnet $vnetName --subnet $intSubnet 2>&1 | Out-Null
+    $vnetExit = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    if ($vnetExit -ne 0) { throw "az functionapp vnet-integration add failed (exit $vnetExit)" }
+    Write-Host "    integrated with $intSubnetId" -ForegroundColor Green
+}
 
 # ---------------------------------------------------------------------------
 # Stage 5 - Deploy code (while SCM is still public)
@@ -168,7 +219,7 @@ with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
 print(out)
 "@
     $py | & $pythonExe -
-    az functionapp deployment source config-zip -g $resourceGroup -n $funcName --src $zipPath --build-remote true | Out-Null
+    Invoke-AzWrite { az functionapp deployment source config-zip -g $resourceGroup -n $funcName --src $zipPath --build-remote true } 'zip deploy'
     Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
     Write-Host "    deployed $zipPath" -ForegroundColor Green
 } else {
@@ -184,26 +235,24 @@ $funcId = az functionapp show -g $resourceGroup -n $funcName --query id -o tsv
 
 function New-PrivateEndpoint {
     param($Name, $ResourceId, $GroupId, $DnsZone)
-    $exists = az network private-endpoint show -g $resourceGroup -n $Name --query id -o tsv 2>$null
+    $exists = Invoke-AzProbe { az network private-endpoint show -g $resourceGroup -n $Name --query id -o tsv }
     if (-not $exists) {
-        az network private-endpoint create -g $resourceGroup -n $Name -l $location `
-            --subnet $peSubnetId --private-connection-resource-id $ResourceId `
-            --group-id $GroupId --connection-name "$Name-conn" | Out-Null
+        Invoke-AzWrite { az network private-endpoint create -g $resourceGroup -n $Name -l $location --subnet $peSubnetId --private-connection-resource-id $ResourceId --group-id $GroupId --connection-name "$Name-conn" } "PE $Name create"
         Write-Host "    created PE '$Name' ($GroupId)" -ForegroundColor Green
     } else {
         Write-Host "    PE '$Name' exists" -ForegroundColor Yellow
     }
-    $zoneId = az network private-dns zone show -g $resourceGroup -n $DnsZone --query id -o tsv 2>$null
+    $zoneId = Invoke-AzProbe { az network private-dns zone show -g $resourceGroup -n $DnsZone --query id -o tsv }
     if (-not $zoneId) {
-        az network private-dns zone create -g $resourceGroup -n $DnsZone | Out-Null
-        az network private-dns link vnet create -g $resourceGroup -z $DnsZone `
-            -n "$($DnsZone -replace '\.','-')-link" --virtual-network $vnetName --registration-enabled false | Out-Null
+        Invoke-AzWrite { az network private-dns zone create -g $resourceGroup -n $DnsZone } "DNS zone $DnsZone create"
+        Invoke-AzWrite { az network private-dns link vnet create -g $resourceGroup -z $DnsZone -n "$($DnsZone -replace '\.','-')-link" --virtual-network $vnetName --registration-enabled false } "DNS link $DnsZone"
         $zoneId = az network private-dns zone show -g $resourceGroup -n $DnsZone --query id -o tsv
         Write-Host "    created + linked DNS zone '$DnsZone'" -ForegroundColor Green
     }
-    az network private-endpoint dns-zone-group create -g $resourceGroup `
-        --endpoint-name $Name -n $zoneGroupName `
-        --private-dns-zone $zoneId --zone-name ($DnsZone -replace '\.','-') 2>$null | Out-Null
+    $zgExists = Invoke-AzProbe { az network private-endpoint dns-zone-group show -g $resourceGroup --endpoint-name $Name -n $zoneGroupName --query id -o tsv }
+    if (-not $zgExists) {
+        Invoke-AzWrite { az network private-endpoint dns-zone-group create -g $resourceGroup --endpoint-name $Name -n $zoneGroupName --private-dns-zone $zoneId --zone-name ($DnsZone -replace '\.','-') } "dns-zone-group $Name"
+    }
 }
 
 if ($privateStorage) {
@@ -218,11 +267,13 @@ New-PrivateEndpoint -Name $peName -ResourceId $funcId -GroupId "sites" -DnsZone 
 if (-not $KeepPublicAccess) {
     Write-Host "==> Stage 7: disable public network access" -ForegroundColor Cyan
     if ($privateStorage) {
-        az storage account update -g $resourceGroup -n $stName --public-network-access Disabled --default-action Deny | Out-Null
+        Invoke-AzWrite { az storage account update -g $resourceGroup -n $stName --public-network-access Disabled --default-action Deny } 'storage lockdown'
         Write-Host "    storage public access disabled" -ForegroundColor Green
     }
-    az resource update --ids $funcId --set properties.publicNetworkAccess=Disabled --api-version 2023-12-01 | Out-Null
-    az functionapp config access-restriction set -g $resourceGroup -n $funcName --use-same-restrictions-for-scm-site true 2>$null | Out-Null
+    Invoke-AzWrite { az resource update --ids $funcId --set properties.publicNetworkAccess=Disabled --api-version 2023-12-01 } 'function public access disable'
+    $prevEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    az functionapp config access-restriction set -g $resourceGroup -n $funcName --use-same-restrictions-for-scm-site true 2>&1 | Out-Null
+    $ErrorActionPreference = $prevEap
     Write-Host "    function app public access disabled" -ForegroundColor Green
 } else {
     Write-Host "==> Stage 7: skipped (-KeepPublicAccess)" -ForegroundColor Yellow
