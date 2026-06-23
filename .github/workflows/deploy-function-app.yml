@@ -1,0 +1,60 @@
+name: deploy-function-app
+
+# Runs ONLY when the Data Function App's code, its config, or its deploy scripts change.
+# README / markdown changes are explicitly excluded so docs-only edits never trigger a deploy.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'function-app/**'
+      - '!function-app/**/*.md'
+      - 'config/function_app_config.json'
+      - 'scripts/deploy-function-app.ps1'
+      - 'scripts/configure-function-apim.ps1'
+      - '.github/workflows/deploy-function-app.yml'
+
+jobs:
+  deploy-function-app:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read config values
+        id: config
+        shell: bash
+        run: |
+          cfg="config/function_app_config.json"
+          echo "resource_group=$(jq -r '.resource_group' $cfg)" >> "$GITHUB_OUTPUT"
+          echo "function_app=$(jq -r '.function_app.name' $cfg)" >> "$GITHUB_OUTPUT"
+          echo "default_hostname=$(jq -r '.endpoints.function_default_hostname' $cfg)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Provision + deploy private Function App
+        shell: pwsh
+        run: ./scripts/deploy-function-app.ps1
+
+      - name: Import Function API into private APIM
+        shell: pwsh
+        run: ./scripts/configure-function-apim.ps1
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          echo "Function App : ${{ steps.config.outputs.function_app }}"
+          echo "Host         : ${{ steps.config.outputs.default_hostname }} (private - reachable only inside the VNet)"
+          echo "Foundry agent: run scripts/create_function_agent.py from a VNet-connected host"

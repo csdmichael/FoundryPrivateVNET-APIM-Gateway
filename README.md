@@ -18,6 +18,7 @@ The primary case study is **publishing AI agents to Microsoft Teams**. Each Foun
 - [Bot Registration](#bot-registration)
 - [Test in Web Chat](#test-in-web-chat)
 - [APIM Configuration](#apim-configuration)
+- [Private Data Function App as a Foundry Agent Tool](#private-data-function-app-as-a-foundry-agent-tool)
 - [AI Gateway Screenshots](#ai-gateway-screenshots)
 - [Pipeline Testing UI](#pipeline-testing-ui)
 - [Configuration](#configuration)
@@ -149,6 +150,11 @@ FoundryPrivateVNET-APIM-Gateway/
 |
 |-- bot-function/                  # Azure Function App -- Bot Framework messaging endpoint
 |-- bot-deploy.zip                 # Pre-built bot function deployment archive
+|-- function-app/                  # Private Data Function App (Python v2) -- Foundry agent tool
+|   |-- function_app.py            # HTTP data APIs (products, inventory, orders)
+|   |-- openapi.json               # OpenAPI 3.0 spec (Swagger + APIM + Foundry tool)
+|   |-- data/catalog.json          # Sample data
+|   `-- README.md                  # Private FN App -> APIM -> Foundry agent guide (TOC, diagram)
 |-- api/
 |   |-- server.py                  # Canonical FastAPI app entrypoint
 |   `-- startup.sh                 # App Service startup script
@@ -157,6 +163,9 @@ FoundryPrivateVNET-APIM-Gateway/
 |   |-- deploy.ps1                 # Main deployment orchestrator
 |   |-- deploy-helpers.sh          # Shared bash deploy helper -- ARM-based zip deploy with status polling
 |   |-- configure-apim.ps1         # APIM API/product/policy setup
+|   |-- deploy-function-app.ps1    # Provision private Data Function App + private endpoints
+|   |-- configure-function-apim.ps1  # Import Data Function API into private APIM
+|   |-- create_function_agent.py   # Create Foundry agent OpenAPI tool for the Function API
 |   |-- configure-foundry-ai-gateway.ps1  # Foundry OpenAI gateway APIM surface
 |   |-- ensure-foundry-search-connection.ps1
 |   |-- package-teams-agents.ps1   # Zips each Agent-Package folder
@@ -778,6 +787,30 @@ To bypass APIM and call Foundry directly (e.g. from a VNet-connected machine), s
 $env:FOUNDRY_DIRECT = '1'
 ./scripts/export-agents-generate-packages.ps1
 ```
+
+## Private Data Function App as a Foundry Agent Tool
+
+Beyond the AI Search-grounded chat agents, this project includes a **private Azure Function App** that
+serves data APIs (product catalog, inventory, orders) and is consumed by a Foundry agent as an **OpenAPI
+tool** — with **private endpoints for every hop** and **public access disabled** end to end:
+
+`Foundry agent → private APIM → private Function App → private Storage`
+
+The complete, config-driven walkthrough — provisioning, private endpoints, APIM import, agent wiring,
+architecture diagram, all URLs, and Microsoft Learn references — lives in a dedicated guide:
+
+➡️ **[function-app/README.md](function-app/README.md)**
+
+Quick start:
+
+```powershell
+./scripts/deploy-function-app.ps1        # provision private Function App + private endpoints
+./scripts/configure-function-apim.ps1    # import the API into the private APIM gateway
+python ./scripts/create_function_agent.py  # create the Foundry agent OpenAPI tool
+```
+
+All resource names, subnets, paths, and the agent definition come from
+[config/function_app_config.json](config/function_app_config.json) — nothing is hardcoded.
 
 ## AI Gateway Screenshots
 

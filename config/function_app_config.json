@@ -1,0 +1,81 @@
+{
+  "description": "Central, no-hardcode configuration for the private Data Function App, its private endpoint, APIM import, and Foundry agent tool wiring. Consumed by scripts/deploy-function-app.ps1, scripts/configure-function-apim.ps1, scripts/create_function_agent.py and config/__init__.py.",
+  "subscription_id": "86b37969-9445-49cf-b03f-d8866235171c",
+  "resource_group": "ai-myaacoub",
+  "location": "eastus",
+  "function_app": {
+    "name": "func-fdryvnetgw-data-eastus",
+    "runtime": "python",
+    "runtime_version": "3.11",
+    "functions_extension_version": "~4",
+    "os": "linux",
+    "https_only": true,
+    "public_network_access": "Disabled",
+    "always_on": true,
+    "route_prefix": "api",
+    "routes": {
+      "health": "api/health",
+      "products": "api/products",
+      "product_by_id": "api/products/{productId}",
+      "categories": "api/categories",
+      "inventory_by_id": "api/inventory/{productId}",
+      "orders": "api/orders",
+      "openapi": "api/openapi.json",
+      "swagger_ui": "api/swagger"
+    }
+  },
+  "hosting_plan": {
+    "comment": "All pre-existing App Service plans are in West US 2; private VNet integration requires the plan in East US, so reuse is not viable. Set reuse_existing=true and reuse_plan_name only if an East US plan (Basic B1 or higher / Elastic Premium) already exists.",
+    "name": "asp-fdryvnetgw-data-eastus",
+    "sku": "B1",
+    "tier": "Basic",
+    "os": "linux",
+    "reuse_existing": false,
+    "reuse_plan_name": ""
+  },
+  "storage_account": {
+    "name": "stfdryvnetgwdata",
+    "sku": "Standard_LRS",
+    "kind": "StorageV2",
+    "private_storage": true,
+    "content_over_vnet": true,
+    "private_endpoint_subresources": ["blob", "file"],
+    "private_dns_zones": {
+      "blob": "privatelink.blob.core.windows.net",
+      "file": "privatelink.file.core.windows.net"
+    }
+  },
+  "networking": {
+    "vnet_name": "vnet-fdryvnetgw-eastus",
+    "integration_subnet": "appsvc-integration",
+    "private_endpoint_subnet": "private-endpoints",
+    "private_dns_zone": "privatelink.azurewebsites.net",
+    "private_endpoint_name": "pe-func-data-eastus",
+    "dns_zone_group_name": "func-data-zone-group"
+  },
+  "apim": {
+    "api_id": "foundry-data-function-api",
+    "api_path": "data-function",
+    "api_display_name": "Foundry Data Function API",
+    "api_description": "Private Azure Function data APIs (product catalog, inventory, orders) exposed through the private APIM AI gateway for consumption by an Azure AI Foundry agent.",
+    "product_name": "foundry-privatevnet-product",
+    "subscription_required": false,
+    "backend_id": "data-function-backend"
+  },
+  "foundry_agent": {
+    "name": "Data-Function-Agent",
+    "model_deployment": "gpt-4.1",
+    "tool_name": "data_function_api",
+    "instructions": "You are an operations assistant for Contoso. Use the data_function_api tool to fetch live product catalog, inventory, and order data. Always call the tool to answer questions about products, categories, stock levels, or orders instead of guessing. Cite the productId or orderId you used. If the tool returns no data, say so explicitly."
+  },
+  "endpoints": {
+    "comment": "Populated/echoed by the deployment scripts. Static values here are the deterministic names derived from the resource names above.",
+    "function_default_hostname": "https://func-fdryvnetgw-data-eastus.azurewebsites.net",
+    "function_swagger_url": "https://func-fdryvnetgw-data-eastus.azurewebsites.net/api/swagger",
+    "function_openapi_url": "https://func-fdryvnetgw-data-eastus.azurewebsites.net/api/openapi.json",
+    "apim_api_base_url": "https://ai-gateway-apim-poc-my.azure-api.net/data-function/api",
+    "apim_openapi_url": "https://ai-gateway-apim-poc-my.azure-api.net/data-function/api/openapi.json",
+    "foundry_project_endpoint": "https://002-ai-poc-private.services.ai.azure.com/api/projects/proj-default",
+    "foundry_agents_portal": "https://ai.azure.com"
+  }
+}

@@ -53,6 +53,10 @@ def storage_config() -> dict:
     return _get("storage_config.json")
 
 
+def function_app_config() -> dict:
+    return _get("function_app_config.json")
+
+
 def use_case_settings(use_case: str | None = None) -> dict:
     key = use_case or get_use_case()
     return azure_resources()["use_cases"][key]
@@ -88,3 +92,15 @@ def app_service_urls() -> dict:
 def default_allowed_origins() -> str:
     apps = azure_resources()["app_services"]
     return f"{apps['ui_url']},http://localhost:4200"
+
+
+def function_apim_base_url() -> str:
+    """APIM gateway base URL for the Data Function API (e.g. https://<apim>/data-function/api)."""
+    gateway_url = azure_resources()["apim"]["gateway_url"].rstrip("/")
+    api_path = function_app_config()["apim"]["api_path"].strip("/")
+    return f"{gateway_url}/{api_path}/api"
+
+
+def function_openapi_url() -> str:
+    """APIM-fronted OpenAPI document URL for the Data Function API."""
+    return f"{function_apim_base_url()}/openapi.json"
