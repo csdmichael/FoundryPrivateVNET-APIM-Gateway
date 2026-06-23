@@ -16,6 +16,7 @@ and [`config/azure_resources.json`](../config/azure_resources.json).
 - [Architecture](#architecture)
 - [Key URLs](#key-urls)
 - [Why Each Resource Is Private](#why-each-resource-is-private)
+- [Developer Access: Keep It Private, but Let the Company IP Range Test](#developer-access-keep-it-private-but-let-the-company-ip-range-test)
 - [Prerequisites](#prerequisites)
 - [Configuration (No Hardcoding)](#configuration-no-hardcoding)
 - [The Function App](#the-function-app)
@@ -105,6 +106,150 @@ flowchart LR
 | APIM → Function | APIM outbound VNet integration + Function private endpoint (`privatelink.azurewebsites.net`) | Function `publicNetworkAccess=Disabled` |
 | Function → Storage | Function VNet integration + Storage blob/file private endpoints | Storage `publicNetworkAccess=Disabled` |
 | Name resolution | Private DNS zones linked to `vnet-fdryvnetgw-eastus` | Split-horizon: public DNS never returns private IPs |
+
+---
+
+## Developer Access: Keep It Private, but Let the Company IP Range Test
+
+The end-to-end design above keeps **Foundry, the Function App, and APIM** private with `publicNetworkAccess=Disabled`. That is correct for production traffic, but it also blocks the people who need to **test** the system from their laptops:
+
+- the **APIM developer/test portal** and direct gateway calls (`https://ai-gateway-apim-poc-my.azure-api.net/...`),
+- the **Foundry portal** data-plane (`https://002-ai-poc-private.services.ai.azure.com/...` behind `https://ai.azure.com`),
+- the **Function Swagger UI** for spec validation.
+
+There are two supported ways to give developers access. **Pattern A is the most secure; use Pattern B only when A is not available.**
+
+### Pattern A — Private access from inside the network (recommended)
+
+Keep all three resources fully private and bring the developer *into* the VNet:
+
+| Option | What it is | When to use |
+|--------|-----------|-------------|
+| **VNet jump box** | A small VM in a `dev-jumpbox` subnet of `vnet-fdryvnetgw-eastus`, reached via Azure Bastion | Quick, no client setup, fully private |
+| **Point-to-Site / Site-to-Site VPN** | VPN Gateway in the VNet; laptops dial in and resolve private DNS | Many developers, ongoing access |
+| **Private DNS resolver + ExpressRoute** | Corporate network peered/forwarded to the VNet | Enterprise, on-prem integration |
+
+With Pattern A nothing is ever public: `publicNetworkAccess` stays `Disabled`, and the private DNS zones (`privatelink.azure-api.net`, `privatelink.azurewebsites.net`, `*.services.ai.azure.com`) resolve to the private endpoint IPs from inside the VNet.
+
+```powershell
+# Example: a Bastion-reachable jump box subnet (one-time)
+az network vnet subnet create -g ai-myaacoub --vnet-name vnet-fdryvnetgw-eastus `
+  --name dev-jumpbox --address-prefixes 10.40.3.0/24
+# Then create a small VM in dev-jumpbox and connect via Azure Bastion (no public IP on the VM).
+```
+
+### Pattern B — Public + company-IP allowlist (when a VNet path is not available)
+
+If developers cannot join the VNet, you can flip each resource to `publicNetworkAccess=Enabled` **but restrict inbound traffic to the company/developer IP range only**. Every other source is denied, so the surface stays tight.
+
+> ⚠️ **Security trade-off:** an IP allowlist is weaker than a private path. Anything egressing through an allowed IP can reach the resource. Prefer a narrow, well-known corporate CIDR (e.g. an ExpressRoute/NAT egress block) over scattered `/32`s, and revert to Pattern A when possible.
+
+#### Step 1 — Identify the company egress IP range
+
+Use the **corporate NAT/proxy egress CIDR** your network team owns (for example `203.0.113.0/24`). This is the public IP block all developer traffic appears to come from.
+
+> **Gotcha — Azure SNAT pools:** if developers reach Azure PaaS endpoints from inside Azure (Cloud Shell, a hosted runner, a dev box, or certain corporate proxies), their traffic does **not** use the office internet IP. It egresses through a **rotating pool of Azure SNAT IPs**. A single `/32` will intermittently fail. Discover the actual source IPs from the `x-ms-forbidden-ip` response header that App Service returns on a 403:
+>
+> ```powershell
+> # Sample the egress IP that App Service sees (works even while public access is restricted)
+> $ips=@{}
+> 1..60 | ForEach-Object {
+>   $h = curl.exe -sS -D - -o NUL "https://func-fdryvnetgw-data-eastus.azurewebsites.net/api/health" 2>$null |
+>        Select-String 'x-ms-forbidden-ip'
+>   if ($h) { $ip = ($h -split ':')[1].Trim(); $ips[$ip] = $ips[$ip] + 1 }
+> }
+> $ips.GetEnumerator() | Sort-Object Name    # the full set of IPs to allowlist
+> ```
+
+#### Step 2 — Allowlist the range on APIM (gateway ip-filter)
+
+Flip APIM to public, then add an `ip-filter` to the **global policy**. The global scope must **not** contain `<base/>`.
+
+```powershell
+# Enable public access (async, ~4 min on StandardV2)
+az rest --method PATCH `
+  --url "https://management.azure.com/subscriptions/<sub>/resourceGroups/ai-myaacoub/providers/Microsoft.ApiManagement/service/ai-gateway-apim-poc-my?api-version=2024-05-01" `
+  --body '{"properties":{"publicNetworkAccess":"Enabled"}}' --headers "Content-Type=application/json"
+```
+
+Global policy (`<policies>/policy`) — allow only the company range:
+
+```xml
+<policies>
+  <inbound>
+    <ip-filter action="allow">
+      <address-range from="203.0.113.0" to="203.0.113.255" />
+      <!-- or individual <address>X.X.X.X</address> entries -->
+    </ip-filter>
+  </inbound>
+  <backend><forward-request /></backend>
+  <outbound />
+  <on-error />
+</policies>
+```
+
+A request that passes the filter returns the API/`404` (not `403`). With the developer portal enabled, testers can now exercise the gateway and the **API test console**.
+
+#### Step 3 — Allowlist the range on the Function App (access restrictions)
+
+```powershell
+az functionapp update -g ai-myaacoub -n func-fdryvnetgw-data-eastus --set publicNetworkAccess=Enabled
+az functionapp config access-restriction add -g ai-myaacoub -n func-fdryvnetgw-data-eastus `
+  --rule-name allow-company --action Allow --ip-address 203.0.113.0/24 --priority 100
+# An implicit "Deny all" is appended automatically once any Allow rule exists.
+```
+
+> **APIM → Function egress gotcha:** when APIM (public, vnetType=None) forwards to the Function over its outbound NAT, the Function sees **APIM's egress IP**, not the developer's. If that IP is not allowlisted, the gateway call returns the App Service page `403 Web App - Unavailable` with header `x-ms-forbidden-ip: <apim-egress-ip>`. **Also allowlist APIM's outbound IP on the Function:**
+>
+> ```powershell
+> # Discover APIM's egress IP (it appears in x-ms-forbidden-ip when calling THROUGH the gateway)
+> curl.exe -sS -D - -o NUL "https://ai-gateway-apim-poc-my.azure-api.net/data-function/api/categories" |
+>   Select-String 'x-ms-forbidden-ip'
+> az functionapp config access-restriction add -g ai-myaacoub -n func-fdryvnetgw-data-eastus `
+>   --rule-name allow-apim-egress --action Allow --ip-address 4.156.128.70/32 --priority 140
+> ```
+> The cleaner alternative is to give APIM **outbound VNet integration** (Step 4 of the main walkthrough) so it reaches the Function over the private endpoint and no egress `/32` is needed.
+
+#### Step 4 — Allowlist the range on Foundry (network ACLs)
+
+This is what lets developers open the **Foundry portal** (`https://ai.azure.com`) and have its data-plane calls to `002-ai-poc-private.services.ai.azure.com` succeed.
+
+```powershell
+az cognitiveservices account network-rule add -g ai-myaacoub -n 002-ai-poc-private --ip-address 203.0.113.0/24
+# Ensure default action denies everything else:
+az resource update --ids "<foundry-account-id>" --api-version 2024-10-01 `
+  --set properties.publicNetworkAccess=Enabled properties.networkAcls.defaultAction=Deny
+```
+
+#### Step 5 — Keep the three allowlists in sync
+
+Because the same developer pool must be allowed on **all three** resources, drift causes confusing, intermittent `403`s (one resource updated, another not). Use [`scripts/sync-ip-allowlists.ps1`](../scripts/sync-ip-allowlists.ps1) to set the identical client-IP set on APIM, the Function App, and Foundry in one shot (and to keep APIM's egress IP on the Function):
+
+```powershell
+# Default set is the discovered company/dev egress IPs; override with -ClientIp as needed
+./scripts/sync-ip-allowlists.ps1 -ClientIp '203.0.113.10','203.0.113.11' -ApimEgressIp '4.156.128.70'
+```
+
+#### Step 6 — Verify
+
+```powershell
+# Gateway should be consistently 200 from an allowed IP
+1..20 | ForEach-Object { curl.exe -sS -o NUL -w "%{http_code} " `
+  "https://ai-gateway-apim-poc-my.azure-api.net/data-function/api/categories" }
+```
+
+Then open `https://ai.azure.com` → project `proj-default` and confirm the portal loads agents/models without an access error.
+
+### Best practices checklist
+
+- **Prefer Pattern A** (jump box / VPN / private resolver). Treat Pattern B as a temporary testing convenience, not a production posture.
+- **Allowlist a CIDR, not a pile of `/32`s.** A stable corporate egress block (or ExpressRoute NAT range) avoids the SNAT-rotation whack-a-mole.
+- **Allow APIM's outbound egress IP on the Function**, or — better — give APIM outbound VNet integration so the backend hop stays private.
+- **Never use `defaultAction=Allow`.** Always default-Deny and allow explicitly.
+- **Synchronize all three resources together** with [`scripts/sync-ip-allowlists.ps1`](../scripts/sync-ip-allowlists.ps1); a partial update is the most common cause of intermittent `403`.
+- **Re-discover egress IPs after network changes** via the `x-ms-forbidden-ip` header; corporate NAT/SNAT pools change over time.
+- **Document and time-box** any public window. Revert to `publicNetworkAccess=Disabled` once testing is done (the root [`scripts/rollback-private-cutover.ps1`](../scripts/rollback-private-cutover.ps1) re-enables/locks down).
+- **Distinguish the two 403s:** APIM ip-filter returns JSON `{ "statusCode": 403, "message": "Forbidden" }`; App Service IP block returns the HTML `403 Web App - Unavailable` page with `x-ms-forbidden-ip`. The header tells you exactly which IP to add and on which layer.
 
 ---
 
@@ -306,6 +451,10 @@ sequenceDiagram
 | Agent tool call times out | Foundry cannot resolve/reach APIM privately | Confirm `privatelink.azure-api.net` A record + APIM private endpoint |
 | `func host` reachable from internet | Lockdown stage skipped | Re-run deploy without `-KeepPublicAccess` |
 | Zip deploy fails after lockdown | SCM site is private | Deploy before disabling public access (default stage order) |
+| Gateway returns HTML `403 Web App - Unavailable` (`x-ms-forbidden-ip` set) | Function blocks APIM's outbound egress IP | Allowlist APIM's egress IP on the Function, or use APIM outbound VNet integration (see [Developer Access](#developer-access-keep-it-private-but-let-the-company-ip-range-test)) |
+| Gateway returns JSON `{ "statusCode": 403, "message": "Forbidden" }` | Caller IP not in APIM `ip-filter` | Add the company/egress IP to the APIM global policy; run [`scripts/sync-ip-allowlists.ps1`](../scripts/sync-ip-allowlists.ps1) |
+| Foundry portal shows an access/network error | Caller IP not in Foundry network ACLs | Add the company IP range to Foundry network rules (Step 4) |
+| Intermittent `403` (some calls 200, some 403) | Allowlists out of sync, or rotating SNAT egress IP | Sync all three resources; discover missing IPs via `x-ms-forbidden-ip` |
 
 ---
 
