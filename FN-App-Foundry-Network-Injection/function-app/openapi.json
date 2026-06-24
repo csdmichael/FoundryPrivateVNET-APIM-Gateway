@@ -26,8 +26,8 @@
   },
   "servers": [
     {
-      "url": "https://func-fdryvnetgw-data-ni-eastus2.azurewebsites.net/api",
-      "description": "Private Function App host (reachable only inside the injected VNet via private DNS). Overridden at runtime by /api/openapi.json and by the agent tool wiring."
+      "url": "https://func-fdryvnetgw-data-ni-eastus2.azurewebsites.net",
+      "description": "Private Function App host (reachable only inside the injected VNet via private DNS). Paths include the '/api' route prefix, so the server URL is the bare host. Overridden at runtime by the agent tool wiring."
     }
   ],
   "paths": {

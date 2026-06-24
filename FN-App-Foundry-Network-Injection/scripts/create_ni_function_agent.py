@@ -61,8 +61,10 @@ def main() -> None:
     agent_name = agent_cfg["name"]
     model = os.environ.get("MODEL_DEPLOYMENT_NAME", agent_cfg["model_deployment"])
     tool_name = agent_cfg["tool_name"]
-    # Direct private Function App base URL (host + /api).
-    server_url = cfg["endpoints"]["function_api_base_url"]
+    # Direct private Function App host ROOT. The OpenAPI spec's paths already include the
+    # '/api' route prefix (e.g. '/api/categories'), so the tool server must be the bare host
+    # (no '/api'); otherwise the calls double up to '/api/api/...' and 404.
+    server_url = cfg["endpoints"]["function_default_hostname"]
 
     spec = _load_openapi_spec(server_url)
     openapi_tool = OpenApiTool(

@@ -310,7 +310,21 @@ exposed publicly.
 
 ### Step 5 — Create the agent (direct, no APIM)
 
-Run from a host that can reach the private project endpoint (inside the VNet, or while the
+**Prerequisite — a chat model deployment.** The agent needs a model deployment on the account.
+If the project has none, agent runs fail with `invalid_engine_error: Failed to resolve model info`.
+Deploy the model named in `foundry_agent.model_deployment` (default `gpt-4.1`) once:
+
+```powershell
+# Lists available gpt-4* models; -Deploy creates the gpt-4.1 deployment (Standard, capacity 50)
+./scripts/ensure-ni-model-deployment.ps1            # list only
+./scripts/ensure-ni-model-deployment.ps1 -Deploy    # create gpt-4.1
+```
+
+> A freshly created deployment can take a few minutes to propagate; a transient
+> `invalid_deployment: The API deployment for this resource does not exist` right after creation
+> clears on retry.
+
+Then run from a host that can reach the private project endpoint (inside the VNet, or while the
 account is IP-allowed from Step 4):
 
 ```powershell
@@ -318,13 +332,23 @@ python ./scripts/create_ni_function_agent.py
 ```
 
 Creates/updates `Data-Function-Agent` on `proj-default` with an **OpenAPI tool** named
-`data_function_api` whose server URL is the **private Function App** base
-`https://func-fdryvnetgw-data-ni-eastus2.azurewebsites.net/api`. Auth is **anonymous** — the
-injected agent reaches the function over its private endpoint, so no APIM token is needed.
+`data_function_api` whose server URL is the **private Function App host root**
+`https://func-fdryvnetgw-data-ni-eastus2.azurewebsites.net`. The OpenAPI spec's paths already
+include the `/api` route prefix, so the server URL is the bare host (not `.../api`); otherwise
+calls double up to `/api/api/...` and 404. Auth is **anonymous** — the injected agent reaches the
+function over its private endpoint, so no APIM token is needed.
 
 ### Step 6 — Test the agent
 
-Open [https://ai.azure.com](https://ai.azure.com) (via your VNet path from Step 4), select
+**Scripted (end-to-end):** invoke the agent and print its answer. The agent must call the
+`data_function_api` tool, which can only succeed over the private path:
+
+```powershell
+python ./scripts/test_ni_function_agent.py
+python ./scripts/test_ni_function_agent.py "List the product categories."
+```
+
+**Portal:** open [https://ai.azure.com](https://ai.azure.com) (via your VNet path from Step 4), select
 project `proj-default`, open `Data-Function-Agent`, and ask:
 
 - *"List all products in the audio category."*
@@ -332,6 +356,31 @@ project `proj-default`, open `Data-Function-Agent`, and ask:
 - *"Show me all shipped orders."*
 
 The agent invokes `data_function_api` → (private DNS) → private Function App → returns grounded data.
+
+> **Tool egress goes through the data proxy in your subnet — private DNS must resolve the
+> function name to its private IP.** Per the Microsoft traffic-flow table, OpenAPI tool and Azure
+> Functions tool calls route *through your VNet subnet* via the single-tenant **data proxy** in
+> the delegated subnet, reaching the function's **private endpoint**. This requires
+> `privatelink.azurewebsites.net` to be linked to the injected VNet with an A record for the
+> function (Step 2 / the deploy script set this up). If the data proxy resolves the function to
+> its **public** IP, the call egresses to the public front door and returns
+> `HTTP 403 Ip Forbidden` once public access is disabled — see
+> [Troubleshooting](#troubleshooting).
+
+#### Re-locking the Function App after an out-of-band recreate
+
+Recreating the Flex app (for example, to fix storage auth) **drops its private endpoint**. To
+restore the private endpoint + DNS and disable public access **without** touching the (working)
+storage account, re-run the deploy script with both switches and then verify:
+
+```powershell
+# Re-applies ONLY the function PE + privatelink.azurewebsites.net link + public-access lockdown.
+# -SkipDeploy skips the code push; -SkipStorageLockdown leaves storage endpoints/access untouched.
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/deploy-ni-function-app.ps1 -SkipDeploy -SkipStorageLockdown
+
+# Confirms: publicNetworkAccess=Disabled, PE Approved, zone linked, A record -> private IP
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/verify-ni-func-private.ps1
+```
 
 ---
 
@@ -581,7 +630,10 @@ credential / OIDC).
 | [`scripts/configure-standard-agent-setup.ps1`](scripts/configure-standard-agent-setup.ps1) | BYO Storage/Search/Cosmos + connections + RBAC + capability hosts |
 | [`scripts/configure-foundry-network-injection.ps1`](scripts/configure-foundry-network-injection.ps1) | Foundry DNS + private endpoint + `networkInjections` PATCH |
 | [`scripts/enable-portal-access.ps1`](scripts/enable-portal-access.ps1) | Portal access: JumpBox / IpAllow / Revert |
+| [`scripts/ensure-ni-model-deployment.ps1`](scripts/ensure-ni-model-deployment.ps1) | List gpt-4* models; deploy the agent's chat model (gpt-4.1) |
+| [`scripts/verify-ni-func-private.ps1`](scripts/verify-ni-func-private.ps1) | Verify the Function App is private-only (public access, PE, DNS, A record) |
 | [`scripts/create_ni_function_agent.py`](scripts/create_ni_function_agent.py) | Foundry agent OpenAPI tool (direct, anonymous) |
+| [`scripts/test_ni_function_agent.py`](scripts/test_ni_function_agent.py) | Invoke the agent end-to-end and print the grounded answer |
 | [`function-app/function_app.py`](function-app/function_app.py) | Function code (Python v2) |
 | [`function-app/openapi.json`](function-app/openapi.json) | OpenAPI 3.0 spec |
 
@@ -598,6 +650,10 @@ credential / OIDC).
 | `functionapp create` fails: "storage has networking restrictions" | Storage locked before the app could reach it | The deploy script sets VNet integration at create time; ensure file PE + `privatelink.file` zone exist (Step 1 handles this) |
 | Function returns 500 on cold start | Private storage locked down before content share ready | Re-run deploy with `-KeepPublicAccess`, confirm start, then lock down |
 | Agent tool call times out | Agent can't resolve/reach the Function privately | Confirm injection is applied, `agents-injection` delegation, and `privatelink.azurewebsites.net` A record |
+| Agent run fails `invalid_engine_error: Failed to resolve model info` | No model deployment on the project | Run `scripts/ensure-ni-model-deployment.ps1 -Deploy` to deploy `gpt-4.1` |
+| Agent run fails `invalid_deployment: The API deployment ... does not exist` | Model deployment created < ~5 min ago | Wait briefly and re-run the test; the deployment is still propagating |
+| Tool URL hits `/api/api/...` (404) | Tool server URL set to `.../api` while spec paths already include `/api` | Use the host root as the server URL (`create_ni_function_agent.py` now does this) |
+| Agent tool call returns `HTTP 403 Ip Forbidden` (HTML "Web App - Unavailable", header `x-ms-forbidden-ip: <rotating public IP>`) after public access is disabled | The data proxy resolved the function to its **public** IP and egressed to the public front door — private DNS isn't being honored by the managed agent environment. Usually the function PE + `privatelink.azurewebsites.net` link were (re)created **after** the project capability host was provisioned, so the data proxy's DNS view is stale | 1) Confirm private DNS is correct with `verify-ni-func-private.ps1` (zone linked + A record → private IP). 2) Allow time for DNS to propagate to the managed environment, then re-run `test_ni_function_agent.py`. 3) If it persists, the project **capability host** must be recreated (delete + recreate — caphosts are immutable/long-running) so the data proxy re-reads current private DNS; per docs, outbound networking added after caphost creation may require a redeploy |
 | Foundry portal shows a network/access error | Your machine isn't on a VNet path and isn't allowlisted | Use [Step 4](#step-4--give-your-machine-access-to-the-private-foundry-portal): Pattern A (JumpBox) or Pattern B (IpAllow) |
 | Portal still blocked after IpAllow | Egress IP rotates (Azure SNAT) or portal backend probe denied | Prefer Pattern A (JumpBox); IP allowlisting can't cover rotating/backend IPs |
 | Zip deploy fails after lockdown | SCM site is private | Deploy code before disabling public access, or from a VNet host |

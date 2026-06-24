@@ -30,12 +30,23 @@
 .PARAMETER ClientIp
     Override the developer IP(s) to allow in IpAllow mode (comma-separated). Defaults to
     config.portal_access.developer_ips.
+
+.PARAMETER DefaultAllow
+    (IpAllow mode only) Set networkAcls.defaultAction=Allow instead of Deny. The nextgen Foundry
+    portal (https://ai.azure.com) proxies a data-plane status probe through a Microsoft backend IP
+    that is NOT the developer's IP, so with defaultAction=Deny the portal renders the
+    "Private network access required" gate even when the dev /32 is allowed. defaultAction=Allow
+    lets that backend probe through so the portal loads. The data plane stays Entra-auth gated
+    (you still need an Azure AI / Cognitive Services data-plane role). ipRules become inert under
+    Allow. Revert with -Mode Revert when done. Use this when you specifically need the PORTAL UI;
+    omit it if you only call the data-plane API directly from the allowed IP.
 #>
 [CmdletBinding()]
 param(
     [ValidateSet('JumpBox', 'IpAllow', 'Revert')]
     [string]$Mode = 'JumpBox',
-    [string[]]$ClientIp
+    [string[]]$ClientIp,
+    [switch]$DefaultAllow
 )
 
 $ErrorActionPreference = 'Stop'
@@ -104,16 +115,23 @@ if ($Mode -eq 'Revert') {
 
 # Mode IpAllow
 $ips = if ($ClientIp) { $ClientIp } else { $cfg.portal_access.developer_ips }
-Write-Host "==> Mode IpAllow: allow $($ips -join ', ') on '$accountName'" -ForegroundColor Cyan
-Write-Host "    WARNING: this enables public network access (default-Deny + allowlist)." -ForegroundColor Yellow
-Write-Host "    Prefer -Mode JumpBox for a fully private path. Revert with -Mode Revert." -ForegroundColor Yellow
+$defAction = if ($DefaultAllow) { 'Allow' } else { 'Deny' }
+Write-Host "==> Mode IpAllow: allow $($ips -join ', ') on '$accountName' (defaultAction=$defAction)" -ForegroundColor Cyan
+Write-Host "    WARNING: this enables public network access." -ForegroundColor Yellow
+if ($DefaultAllow) {
+    Write-Host "    defaultAction=Allow: data plane is public (still Entra-auth gated) so the nextgen" -ForegroundColor Yellow
+    Write-Host "    portal backend probe succeeds. ipRules are inert under Allow. Revert with -Mode Revert." -ForegroundColor Yellow
+} else {
+    Write-Host "    Prefer -Mode JumpBox for a fully private path. Revert with -Mode Revert." -ForegroundColor Yellow
+    Write-Host "    If the PORTAL UI still blocks, re-run with -DefaultAllow (backend probe needs it)." -ForegroundColor DarkGray
+}
 
 $ipRules = @($ips | ForEach-Object { @{ value = $_ } })
 $body = @{
     properties = @{
         publicNetworkAccess = 'Enabled'
         networkAcls = @{
-            defaultAction = 'Deny'
+            defaultAction = $defAction
             ipRules       = $ipRules
         }
     }
@@ -124,6 +142,7 @@ $resp = New-TemporaryFile
 Invoke-AzWrite { az rest --method PATCH --url $url --body ("@" + $f.FullName) --headers "Content-Type=application/json" --output-file $resp.FullName } 'ipallow PATCH'
 Remove-Item $f.FullName, $resp.FullName -Force -ErrorAction SilentlyContinue
 
+Start-Sleep -Seconds 5  # ARM read-after-write lag: an immediate GET can still report the pre-PATCH values
 $applied = az rest --method GET --url $url -o json | ConvertFrom-Json
 Write-Host "    publicNetworkAccess = $($applied.properties.publicNetworkAccess)" -ForegroundColor Green
 Write-Host "    defaultAction       = $($applied.properties.networkAcls.defaultAction)" -ForegroundColor Green

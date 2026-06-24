@@ -25,13 +25,21 @@
 .PARAMETER KeepPublicAccess
     Skip the final lockdown stage (leave public access enabled) for debugging.
 
+.PARAMETER SkipStorageLockdown
+    Do not create the storage private endpoints (Stage 6) or disable storage public access
+    (Stage 7). Use this to (re)apply ONLY the Function App private endpoint + DNS + public-access
+    lockdown without touching a storage account that is already provisioned and working — e.g.
+    after the Function App was recreated out-of-band (which drops its private endpoint) while the
+    storage account and its existing endpoints must be left as-is.
+
 .NOTES
     Microsoft Learn references are listed in the folder README.md.
 #>
 [CmdletBinding()]
 param(
     [switch]$SkipDeploy,
-    [switch]$KeepPublicAccess
+    [switch]$KeepPublicAccess,
+    [switch]$SkipStorageLockdown
 )
 
 $ErrorActionPreference = 'Stop'
@@ -391,11 +399,13 @@ function New-PrivateEndpoint {
     }
 }
 
-if ($privateStorage) {
+if ($privateStorage -and -not $SkipStorageLockdown) {
     foreach ($sub in $stSubresources) {
         $zone = $stDnsZones.$sub
         New-PrivateEndpoint -Name "pe-$stName-$sub" -ResourceId $stId -GroupId $sub -DnsZone $zone
     }
+} elseif ($SkipStorageLockdown) {
+    Write-Host "    skipping storage private endpoints (-SkipStorageLockdown)" -ForegroundColor Yellow
 }
 New-PrivateEndpoint -Name $peName -ResourceId $funcId -GroupId "sites" -DnsZone $webDnsZone
 
@@ -404,9 +414,11 @@ New-PrivateEndpoint -Name $peName -ResourceId $funcId -GroupId "sites" -DnsZone 
 # ---------------------------------------------------------------------------
 if (-not $KeepPublicAccess) {
     Write-Host "==> Stage 7: disable public network access" -ForegroundColor Cyan
-    if ($privateStorage) {
+    if ($privateStorage -and -not $SkipStorageLockdown) {
         Invoke-AzWrite { az storage account update -g $resourceGroup -n $stName --public-network-access Disabled --default-action Deny } 'storage lockdown'
         Write-Host "    storage public access disabled" -ForegroundColor Green
+    } elseif ($SkipStorageLockdown) {
+        Write-Host "    leaving storage public access unchanged (-SkipStorageLockdown)" -ForegroundColor Yellow
     }
     Invoke-AzWrite { az resource update --ids $funcId --set properties.publicNetworkAccess=Disabled --api-version 2023-12-01 } 'function public access disable'
     $prevEap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
