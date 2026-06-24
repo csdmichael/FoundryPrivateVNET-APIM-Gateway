@@ -71,7 +71,9 @@
       "tenant_id": "b158173c-91f6-4f99-b5e9-aa9bcb463863",
       "allowed_object_ids": {
         "foundry_account_managed_identity": "64712e1f-50cb-4b21-b5c6-e57cc61b0c34",
-        "foundry_project_managed_identity": "e69e2149-7405-4a95-8f56-d40d926ce4f9"
+        "foundry_project_managed_identity": "e69e2149-7405-4a95-8f56-d40d926ce4f9",
+        "nextgen_agent_instance_identity": "b2b8075a-e9f8-439a-a339-ecf524c6fa57",
+        "nextgen_agent_blueprint_principal": "963915ad-6228-4b31-b921-daab6b522678"
       }
     },
     "ip_allowlist": {
