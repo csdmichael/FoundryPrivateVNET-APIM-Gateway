@@ -1,0 +1,2 @@
+# Azure Functions Python v2 programming model
+azure-functions==1.21.3

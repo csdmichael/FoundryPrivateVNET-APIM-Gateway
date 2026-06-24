@@ -1,0 +1,71 @@
+name: deploy-ni-function-app
+
+# Network-injection edition: provisions the private Data Function App in a NEW eastus2 VNet
+# (with the Microsoft.App/environments-delegated agent subnet) for a Foundry agent that
+# consumes it via virtual network injection.
+#
+# Runs ONLY when the network-injection function code, its config, or its deploy script change.
+# Markdown changes are excluded so docs-only edits never trigger a deploy.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'FN-App-Foundry-Network-Injection/function-app/**'
+      - '!FN-App-Foundry-Network-Injection/function-app/**/*.md'
+      - 'FN-App-Foundry-Network-Injection/config/network_injection_config.json'
+      - 'FN-App-Foundry-Network-Injection/scripts/deploy-ni-function-app.ps1'
+      - 'FN-App-Foundry-Network-Injection/scripts/configure-foundry-network-injection.ps1'
+      - '.github/workflows/deploy-ni-function-app.yml'
+
+jobs:
+  deploy-ni-function-app:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: FN-App-Foundry-Network-Injection
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read config values
+        id: config
+        shell: bash
+        run: |
+          cfg="config/network_injection_config.json"
+          echo "resource_group=$(jq -r '.resource_group' $cfg)" >> "$GITHUB_OUTPUT"
+          echo "function_app=$(jq -r '.function_app.name' $cfg)" >> "$GITHUB_OUTPUT"
+          echo "default_hostname=$(jq -r '.endpoints.function_default_hostname' $cfg)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Provision + deploy private Function App (eastus2 VNet + agent subnet)
+        shell: pwsh
+        run: ./scripts/deploy-ni-function-app.ps1
+
+      - name: Configure Foundry network injection
+        shell: pwsh
+        # Network injection requires the Standard Agent setup (BYO Storage + Search + Cosmos DB
+        # + capability hosts). The script reports clearly and exits non-zero if those are missing,
+        # so this step is allowed to fail without failing the (idempotent) infra reconciliation.
+        continue-on-error: true
+        run: ./scripts/configure-foundry-network-injection.ps1
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          echo "Function App : ${{ steps.config.outputs.function_app }}"
+          echo "Host         : ${{ steps.config.outputs.default_hostname }} (private - reachable only inside the eastus2 VNet)"
+          echo "Foundry agent: run scripts/create_ni_function_agent.py from a VNet-connected host"

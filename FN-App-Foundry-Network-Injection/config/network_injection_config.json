@@ -1,0 +1,156 @@
+{
+  "description": "Central, no-hardcode configuration for the network-injection edition of the private Data Function App and its Foundry agent. The Foundry account uses virtual network injection so the agent compute runs inside the VNet and calls the private Function App DIRECTLY over private DNS (no APIM, no token). Consumed by scripts/deploy-ni-function-app.ps1, scripts/configure-foundry-network-injection.ps1, scripts/enable-portal-access.ps1, and scripts/create_ni_function_agent.py.",
+  "subscription_id": "86b37969-9445-49cf-b03f-d8866235171c",
+  "resource_group": "ai-myaacoub",
+  "location": "eastus2",
+  "function_app": {
+    "name": "func-fdryvnetgw-data-ni-eastus2",
+    "runtime": "python",
+    "runtime_version": "3.11",
+    "functions_extension_version": "~4",
+    "os": "linux",
+    "https_only": true,
+    "public_network_access": "Disabled",
+    "always_on": true,
+    "route_prefix": "api",
+    "routes": {
+      "health": "api/health",
+      "products": "api/products",
+      "product_by_id": "api/products/{productId}",
+      "categories": "api/categories",
+      "inventory_by_id": "api/inventory/{productId}",
+      "orders": "api/orders",
+      "openapi": "api/openapi.json",
+      "swagger_ui": "api/swagger"
+    }
+  },
+  "hosting_plan": {
+    "comment": "Flex Consumption (serverless) is used because the subscription has 0 dedicated App Service VM quota in eastus2, and Flex supports regional VNet integration + inbound private endpoints without consuming dedicated VM quota. It is also the modern recommended host for private Functions. model=flexconsumption => no App Service plan is created; the function app is created directly with --flexconsumption-location. Switch model to 'dedicated' (and set sku/tier) only if you have dedicated VM quota in eastus2.",
+    "model": "flexconsumption",
+    "flex_instance_memory_mb": 2048,
+    "flex_max_instance_count": 40,
+    "name": "asp-fdryvnetgw-data-ni-eastus2",
+    "sku": "B1",
+    "tier": "Basic",
+    "os": "linux",
+    "reuse_existing": false,
+    "reuse_plan_name": ""
+  },
+  "storage_account": {
+    "name": "stfdryvnetgwni",
+    "sku": "Standard_LRS",
+    "kind": "StorageV2",
+    "private_storage": true,
+    "content_over_vnet": true,
+    "allow_shared_key_access": false,
+    "deployment_identity_name": "id-func-fdryvnetgw-ni",
+    "comment_identity": "Azure Policy enforces allowSharedKeyAccess=false on storage in this subscription. The Flex Consumption app therefore uses a user-assigned managed identity (deployment_identity_name) for both the runtime (AzureWebJobsStorage__* identity settings) and the deployment-storage container (--deployment-storage-auth-type UserAssignedIdentity). No account keys are used anywhere.",
+    "private_endpoint_subresources": ["blob", "file", "queue", "table"],
+    "private_dns_zones": {
+      "blob": "privatelink.blob.core.windows.net",
+      "file": "privatelink.file.core.windows.net",
+      "queue": "privatelink.queue.core.windows.net",
+      "table": "privatelink.table.core.windows.net"
+    }
+  },
+  "networking": {
+    "comment": "A NEW eastus2 VNet dedicated to the network-injection scenario. The Flex Consumption VNet integration subnet (appsvc-integration) must be delegated to Microsoft.App/environments (Flex uses the same platform as Container Apps; this differs from dedicated/EP which use Microsoft.Web/serverFarms) and be /27 or larger. The agent injection subnet (agents-injection) is a SEPARATE subnet also delegated to Microsoft.App/environments and /27 or larger (Foundry requirement); a subnet cannot be shared between the Flex app and the Foundry-injected environment. private-endpoints holds the Function App + Foundry private endpoints.",
+    "vnet_name": "vnet-fdryvnetgw-ni-eastus2",
+    "vnet_address_prefix": "10.50.0.0/16",
+    "integration_subnet": "appsvc-integration",
+    "integration_subnet_prefix": "10.50.1.0/24",
+    "integration_subnet_delegation": "Microsoft.App/environments",
+    "private_endpoint_subnet": "private-endpoints",
+    "private_endpoint_subnet_prefix": "10.50.2.0/24",
+    "agents_injection_subnet": "agents-injection",
+    "agents_injection_subnet_prefix": "10.50.3.0/27",
+    "agents_injection_delegation": "Microsoft.App/environments",
+    "private_dns_zone": "privatelink.azurewebsites.net",
+    "private_endpoint_name": "pe-func-data-ni-eastus2",
+    "dns_zone_group_name": "func-data-ni-zone-group",
+    "foundry_private_dns_zones": [
+      "privatelink.services.ai.azure.com",
+      "privatelink.cognitiveservices.azure.com",
+      "privatelink.openai.azure.com"
+    ]
+  },
+  "standard_agent": {
+    "comment": "BYO (bring-your-own) resources + capability hosts that make the Foundry account a Standard Agent. Network injection is ONLY accepted once these exist. All three resources are dedicated, low-tier and cost-effective: Cosmos DB in SERVERLESS mode (pay-per-request, no provisioned RU/s charge, satisfies the 3000 RU/s requirement on demand), Azure AI Search on the BASIC tier (lowest GA tier that supports agent vector stores + private endpoints), and Standard_LRS StorageV2. Consumed by scripts/configure-standard-agent-setup.ps1. Connections use AAD (managed identity) auth — no keys. The project's system-assigned managed identity is granted the required roles; principalId/internalId are resolved at runtime by the script, never hardcoded.",
+    "cosmosdb": {
+      "name": "cosmos-fdryvnetgw-ni",
+      "kind": "GlobalDocumentDB",
+      "capacity_mode": "serverless",
+      "default_consistency_level": "Session",
+      "connection_name": "cosmos-fdryvnetgw-ni",
+      "connection_category": "CosmosDB",
+      "thread_database": "enterprise_memory"
+    },
+    "storage": {
+      "name": "stfdryniagent",
+      "sku": "Standard_LRS",
+      "kind": "StorageV2",
+      "connection_name": "stfdryniagent",
+      "connection_category": "AzureStorageAccount"
+    },
+    "search": {
+      "name": "srch-fdryvnetgw-ni",
+      "sku": "basic",
+      "location": "eastus",
+      "location_comment": "Azure AI Search basic/standard capacity was region-wide exhausted in eastus2 (InsufficientResourcesAvailable) and the subscription's single free-tier slot is already used, so the BYO search runs in the adjacent eastus region. Standard Agent allows BYO resources in a different region from the Foundry account; the connection targets the resource by endpoint + ARM id regardless of region. Move it back to eastus2 (re-create) when capacity returns if strict co-location is required.",
+      "partition_count": 1,
+      "replica_count": 1,
+      "connection_name": "srch-fdryvnetgw-ni",
+      "connection_category": "CognitiveSearch"
+    },
+    "capability_hosts": {
+      "comment": "One Agents capability host on the account (empty properties) and one on the project (references the 3 BYO connection names). Capability hosts CANNOT be updated after creation — the script deletes+recreates a Failed one. Project caphost maps: vectorStoreConnections=[search], storageConnections=[storage], threadStorageConnections=[cosmos].",
+      "account_capability_host_name": "caphost-acc-ni",
+      "project_capability_host_name": "caphost-proj-ni"
+    },
+    "lockdown": {
+      "comment": "Optional. When scripts/configure-standard-agent-setup.ps1 -Lockdown is passed, blob/file/queue/table + cosmos + search private endpoints are added into the private-endpoints subnet and public access is disabled on all three BYO resources. Off by default to keep provisioning simple and avoid per-endpoint cost; enable once the agent end-to-end path is verified.",
+      "enabled_by_default": false,
+      "cosmos_private_dns_zone": "privatelink.documents.azure.com",
+      "search_private_dns_zone": "privatelink.search.windows.net"
+    }
+  },
+  "foundry": {
+    "comment": "The pre-existing private Foundry account (eastus2, publicNetworkAccess=Disabled). Network injection points the account's agent scenario at the agents-injection subnet above. The project endpoint is what the agent SDK targets.",
+    "account_name": "003-ai-poc-network-injection",
+    "account_resource_id": "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.CognitiveServices/accounts/003-ai-poc-network-injection",
+    "project_name": "proj-default",
+    "project_endpoint": "https://003-ai-poc-network-injection.services.ai.azure.com/api/projects/proj-default",
+    "account_api_version": "2025-04-01-preview",
+    "tenant_id": "b158173c-91f6-4f99-b5e9-aa9bcb463863",
+    "system_assigned_identity_principal_id": "1bada387-256f-4300-a806-5828abe5b034",
+    "network_injection": {
+      "comment": "PATCH onto the account properties.networkInjections. scenario=agent, subnetArmId=agents-injection subnet, useMicrosoftManagedNetwork=false (bring-your-own VNet). Requires the Standard Agent setup (BYO Storage+Search+CosmosDB private + capability hosts).",
+      "scenario": "agent",
+      "use_microsoft_managed_network": false
+    }
+  },
+  "portal_access": {
+    "comment": "How a developer machine reaches the fully-private Foundry portal. Pattern A (preferred) = a VNet path (Bastion jump box / VPN / dev tunnel) into the injected VNet. Pattern B (temporary) = flip the account to publicNetworkAccess=Enabled + networkAcls.defaultAction=Deny + ipRules and allow the developer IP. scripts/enable-portal-access.ps1 implements Pattern B when -Mode IpAllow is passed.",
+    "developer_ips": ["67.180.58.197"],
+    "jumpbox_subnet": "dev-jumpbox",
+    "jumpbox_subnet_prefix": "10.50.4.0/24"
+  },
+  "foundry_agent": {
+    "name": "Data-Function-Agent",
+    "model_deployment": "gpt-4.1",
+    "tool_name": "data_function_api",
+    "auth": "anonymous",
+    "auth_comment": "Anonymous at the tool layer: the agent runs inside the injected VNet and reaches the Function App over its private endpoint. The private network boundary (disabled public access + private endpoint) is the access control, so no APIM token is required.",
+    "server_url_comment": "The agent OpenAPI tool server URL is the PRIVATE Function App host + route prefix, resolved by private DNS from the injected subnet.",
+    "instructions": "You are an operations assistant for Contoso. Use the data_function_api tool to fetch live product catalog, inventory, and order data. Always call the tool to answer questions about products, categories, stock levels, or orders instead of guessing. Cite the productId or orderId you used. If the tool returns no data, say so explicitly."
+  },
+  "endpoints": {
+    "comment": "Deterministic URLs echoed by the deployment scripts.",
+    "function_default_hostname": "https://func-fdryvnetgw-data-ni-eastus2.azurewebsites.net",
+    "function_api_base_url": "https://func-fdryvnetgw-data-ni-eastus2.azurewebsites.net/api",
+    "function_swagger_url": "https://func-fdryvnetgw-data-ni-eastus2.azurewebsites.net/api/swagger",
+    "function_openapi_url": "https://func-fdryvnetgw-data-ni-eastus2.azurewebsites.net/api/openapi.json",
+    "foundry_project_endpoint": "https://003-ai-poc-network-injection.services.ai.azure.com/api/projects/proj-default",
+    "foundry_portal": "https://ai.azure.com"
+  }
+}
