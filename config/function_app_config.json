@@ -61,7 +61,38 @@
     "api_description": "Private Azure Function data APIs (product catalog, inventory, orders) exposed through the private APIM AI gateway for consumption by an Azure AI Foundry agent.",
     "product_name": "foundry-privatevnet-product",
     "subscription_required": false,
-    "backend_id": "data-function-backend"
+    "backend_id": "data-function-backend",
+    "entra_auth": {
+      "comment": "Managed-identity (Entra ID) auth for the data-function API. The APIM API-scope policy runs validate-azure-ad-token (checks aud + tenant + oid) when an Authorization header is present, else falls back to an ip-filter for dev hosts. The Foundry agent's managed identity presents a token for 'audience'. This replaces fragile IP allowlisting for the agent call path. See function-app/README.md > 'Managed-identity auth for the Foundry agent'.",
+      "enabled": true,
+      "app_registration_name": "foundry-data-function-api",
+      "app_client_id": "74b186a6-1fab-4856-a13f-28935a0a2393",
+      "audience": "api://74b186a6-1fab-4856-a13f-28935a0a2393",
+      "tenant_id": "b158173c-91f6-4f99-b5e9-aa9bcb463863",
+      "allowed_object_ids": {
+        "foundry_account_managed_identity": "64712e1f-50cb-4b21-b5c6-e57cc61b0c34",
+        "foundry_project_managed_identity": "e69e2149-7405-4a95-8f56-d40d926ce4f9"
+      }
+    },
+    "ip_allowlist": {
+      "comment": "Azure /16 ranges covering this developer's rotating SNAT egress pool (see function-app/README.md > Developer Access). Used as the dev fallback (otherwise branch) on the data-function API and as the API-scope ip-filter on the sensitive APIs. NOTE: APIM ip-filter does NOT accept CIDR -- it requires explicit address ranges.",
+      "ranges": [
+        { "from": "20.1.0.0", "to": "20.1.255.255" },
+        { "from": "20.110.0.0", "to": "20.110.255.255" },
+        { "from": "20.114.0.0", "to": "20.114.255.255" },
+        { "from": "172.172.0.0", "to": "172.172.255.255" },
+        { "from": "172.200.0.0", "to": "172.200.255.255" }
+      ]
+    },
+    "ip_filter_apis": {
+      "comment": "Other APIs on the same APIM instance that must keep their ip-filter protection after it is removed from the global scope. scripts/configure-apim-mi-auth.ps1 injects the ip_allowlist ranges into each at API scope (idempotent, preserves existing policy).",
+      "api_ids": [
+        "002-ai-poc-private",
+        "foundry-agents-gateway",
+        "foundry-privatevnet-agent-gateway",
+        "foundry-privatevnet-app-api"
+      ]
+    }
   },
   "foundry_agent": {
     "name": "Data-Function-Agent",

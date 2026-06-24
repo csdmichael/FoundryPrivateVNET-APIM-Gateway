@@ -17,6 +17,7 @@ and [`config/azure_resources.json`](../config/azure_resources.json).
 - [Key URLs](#key-urls)
 - [Why Each Resource Is Private](#why-each-resource-is-private)
 - [Developer Access: Keep It Private, but Let the Company IP Range Test](#developer-access-keep-it-private-but-let-the-company-ip-range-test)
+- [Managed-Identity Auth for the Foundry Agent (Recommended)](#managed-identity-auth-for-the-foundry-agent-recommended)
 - [Prerequisites](#prerequisites)
 - [Configuration (No Hardcoding)](#configuration-no-hardcoding)
 - [The Function App](#the-function-app)
@@ -253,7 +254,113 @@ Then open `https://ai.azure.com` → project `proj-default` and confirm the port
 
 ---
 
+## Managed-Identity Auth for the Foundry Agent (Recommended)
+
+IP allowlisting cannot reliably cover the **Foundry agent's** call to APIM. When the agent
+invokes its OpenAPI tool, the request egresses from a **Microsoft-managed IP that is not in
+any customer allowlist** and rotates per destination — the same root cause that breaks the
+Foundry portal probe. Chasing those IPs with `ip-filter` is whack-a-mole and will silently
+fail again later. The durable, least-privilege fix is **Microsoft Entra ID token auth**: the
+agent presents a token from its **managed identity**, and APIM validates it.
+
+### How it works
+
+```mermaid
+sequenceDiagram
+    participant Agent as Foundry agent (OpenAPI tool)
+    participant MI as Project managed identity
+    participant AAD as Microsoft Entra ID
+    participant APIM as APIM (data-function API)
+    participant Func as Private Function App
+
+    Agent->>MI: acquire token for audience api://<appId>
+    MI->>AAD: client-credentials (app-only) token request
+    AAD-->>MI: JWT (aud, tid, oid)
+    Agent->>APIM: GET /data-function/... (Authorization: Bearer JWT)
+    APIM->>APIM: validate-azure-ad-token (aud + tenant + oid)
+    APIM->>Func: forward (private endpoint)
+    Func-->>Agent: 200 + data
+```
+
+1. An **Entra app registration** (`foundry-data-function-api`, App ID URI
+   `api://74b186a6-1fab-4856-a13f-28935a0a2393`) is created **only to name the token
+   audience** — APIM has no native Entra resource ID of its own. It needs a service
+   principal so Entra will mint tokens for it, but no secret, no API permissions, and no
+   redirect URI.
+2. The Foundry **project's system-assigned managed identity** requests an app-only token
+   for that audience. App-only token issuance does **not** require an app-role assignment,
+   so this works out of the box.
+3. The APIM **data-function** API policy runs `validate-azure-ad-token` and checks three
+   things: `aud` (the audience above), `tid` (tenant `b158173c-…`), and `oid` (the Foundry
+   account or project managed-identity object id). Anything else is rejected with `401`.
+4. The agent's OpenAPI tool is wired with managed-identity auth in
+   [`scripts/create_function_agent.py`](../scripts/create_function_agent.py) via
+   `OpenApiManagedAuthDetails` / `OpenApiManagedSecurityScheme(audience=…)`.
+
+All of these identifiers are stored in
+[`config/function_app_config.json`](../config/function_app_config.json) → `apim.entra_auth`
+(no hardcoding in scripts).
+
+### APIM policy changes applied
+
+The ip-filter used for IP allowlisting was **moved from the global scope to per-API scope**
+so that removing it from the agent's path does not expose the other APIs:
+
+| API | Inbound policy after the change |
+|-----|---------------------------------|
+| `foundry-data-function-api` | `choose`: **token branch** (`validate-azure-ad-token`) when an `Authorization` header is present, **else** an `ip-filter` fallback for developer hosts |
+| `002-ai-poc-private`, `foundry-agents-gateway`, `foundry-privatevnet-agent-gateway`, `foundry-privatevnet-app-api` | their original policy **plus** an API-scope `ip-filter` (re-applied from config) |
+| *global (service scope)* | ip-filter **removed** (empty default policy, no `<base/>`) |
+
+This is fully reproducible from config:
+
+```powershell
+# 1) data-function API: import + Entra-token-or-IP-fallback policy
+pwsh ./scripts/configure-function-apim.ps1
+# 2) move ip-filter off the global scope onto the other APIs (idempotent)
+pwsh ./scripts/configure-apim-mi-auth.ps1
+# 3) (re)wire the agent tool to use managed identity
+python ./scripts/create_function_agent.py
+```
+
+The token-or-IP `choose` keeps **developer access working** (a browser/curl from an
+allowlisted dev IP sends no `Authorization` header → hits the `ip-filter` fallback), while
+the **agent** (which always sends a bearer token) is validated by Entra ID. A misconfigured
+token therefore only affects the agent, never the dev path or the other APIs.
+
+### Is this "RBAC"? — App role assignment (optional hardening)
+
+Validating the managed identity's `oid` is already an explicit authorization decision
+(only those two identities are accepted). For a stricter, Azure-RBAC-style posture you can
+expose an **app role** on the audience app registration and **assign it to the Foundry
+managed identity**, then have APIM additionally require that role claim:
+
+```powershell
+# Expose an app role "Data.Invoke" on the app registration, then assign it to the
+# Foundry project managed identity (objectId e69e2149-… ; appId of the audience app
+# 74b186a6-…). Requires Application.ReadWrite.All / AppRoleAssignment.ReadWrite.All.
+$appObjId  = (az ad app show --id 74b186a6-1fab-4856-a13f-28935a0a2393 --query id -o tsv)
+$spObjId   = '4fdae9c1-2463-4e5b-ac6e-b4e292e42d31'   # audience app's service principal
+$miObjId   = 'e69e2149-7405-4a95-8f56-d40d926ce4f9'   # Foundry project managed identity
+# (define the appRole in the manifest, then:)
+az rest --method POST `
+  --url "https://graph.microsoft.com/v1.0/servicePrincipals/$miObjId/appRoleAssignments" `
+  --body "{`"principalId`":`"$miObjId`",`"resourceId`":`"$spObjId`",`"appRoleId`":`"<roleId>`"}"
+```
+
+Then add a `<required-claims>` check for `roles` to the `validate-azure-ad-token` policy.
+This is optional — the `oid` claim check already restricts the API to the two known
+identities — but app-role assignment is the gold-standard, auditable RBAC grant.
+
+> **Security note:** while testing, the Foundry account is set to
+> `publicNetworkAccess=Enabled` + `networkAcls.defaultAction=Allow`. For production, revert
+> to a private endpoint (Pattern A) — token auth and private networking are complementary,
+> not alternatives.
+
+---
+
 ## Prerequisites
+
 
 - The private VNet, APIM (StandardV2, private), and Foundry (private) from the root
   [README](../README.md) are already deployed.
@@ -455,6 +562,8 @@ sequenceDiagram
 | Gateway returns JSON `{ "statusCode": 403, "message": "Forbidden" }` | Caller IP not in APIM `ip-filter` | Add the company/egress IP to the APIM global policy; run [`scripts/sync-ip-allowlists.ps1`](../scripts/sync-ip-allowlists.ps1) |
 | Foundry portal shows an access/network error | Caller IP not in Foundry network ACLs | Add the company IP range to Foundry network rules (Step 4) |
 | Intermittent `403` (some calls 200, some 403) | Allowlists out of sync, or rotating SNAT egress IP | Sync all three resources; discover missing IPs via `x-ms-forbidden-ip` |
+| **Foundry agent** tool call returns `403` while dev curl works | Agent egresses from a Microsoft-managed IP not in any `ip-filter` | Switch the agent to managed-identity token auth (see [Managed-Identity Auth](#managed-identity-auth-for-the-foundry-agent-recommended)); IP allowlisting cannot cover the agent |
+| Agent tool call returns `401 Invalid or missing Entra ID token` | Token `aud`/`tenant`/`oid` did not match the APIM policy | Confirm `apim.entra_auth.audience`, `tenant_id`, and the managed-identity `oid`s in config match the deployed app registration; re-run `configure-function-apim.ps1` |
 
 ---
 
@@ -471,5 +580,7 @@ sequenceDiagram
 - [Use API Management with private endpoints](https://learn.microsoft.com/azure/api-management/private-endpoint)
 - [How to use Azure AI Foundry Agent Service with OpenAPI Specified Tools](https://learn.microsoft.com/azure/ai-foundry/agents/how-to/tools/openapi-spec)
 - [Azure AI Foundry Agent Service network-secured (private) setup](https://learn.microsoft.com/azure/ai-foundry/agents/how-to/virtual-networks)
+- [APIM `validate-azure-ad-token` policy](https://learn.microsoft.com/azure/api-management/validate-azure-ad-token-policy)
+- [Authenticate to an OpenAPI tool with managed identity in Foundry Agent Service](https://learn.microsoft.com/azure/ai-foundry/agents/how-to/tools/openapi-spec#authenticating-with-managed-identity)
 - [Azure Private Link / private endpoint overview](https://learn.microsoft.com/azure/private-link/private-endpoint-overview)
 - [Azure Private DNS zones for private endpoints](https://learn.microsoft.com/azure/private-link/private-endpoint-dns)

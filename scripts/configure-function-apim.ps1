@@ -68,7 +68,45 @@ Invoke-AzWrite { az apim api import --resource-group $resourceGroup --service-na
 
 Invoke-AzWrite { az apim api update --resource-group $resourceGroup --service-name $apimName --api-id $apiId --subscription-required $subRequired.ToString().ToLower() } 'apim api update'
 
-Write-Host "==> Applying API policy (backend rewrite + CORS)" -ForegroundColor Cyan
+Write-Host "==> Applying API policy (backend rewrite + CORS + managed-identity auth)" -ForegroundColor Cyan
+
+# Build the inbound auth block from config. When entra_auth is enabled the API requires
+# a valid Entra ID token (validate-azure-ad-token) for any request that carries an
+# Authorization header (the Foundry agent's managed identity), and falls back to an
+# ip-filter allowlist for dev hosts that call without a token. Disabling entra_auth
+# reverts to ip-filter only.
+$entra = $cfg.apim.entra_auth
+$ranges = $cfg.apim.ip_allowlist.ranges
+$ipFilterXml = "<ip-filter action=`"allow`">`n" + (
+    ($ranges | ForEach-Object { "          <address-range from=`"$($_.from)`" to=`"$($_.to)`" />" }) -join "`n"
+) + "`n        </ip-filter>"
+
+if ($entra -and $entra.enabled) {
+    $oidValues = @($entra.allowed_object_ids.PSObject.Properties.Value | ForEach-Object { "              <value>$_</value>" }) -join "`n"
+    $authBlock = @"
+<choose>
+          <when condition="@(context.Request.Headers.ContainsKey(&quot;Authorization&quot;))">
+            <validate-azure-ad-token tenant-id="$($entra.tenant_id)" header-name="Authorization" failed-validation-httpcode="401" failed-validation-error-message="Invalid or missing Entra ID token.">
+              <audiences>
+                <audience>$($entra.audience)</audience>
+                <audience>$($entra.app_client_id)</audience>
+              </audiences>
+              <required-claims>
+                <claim name="oid" match="any">
+$oidValues
+                </claim>
+              </required-claims>
+            </validate-azure-ad-token>
+          </when>
+          <otherwise>
+            $ipFilterXml
+          </otherwise>
+        </choose>
+"@
+} else {
+    $authBlock = $ipFilterXml
+}
+
 $policyXml = @"
 <policies>
   <inbound>
@@ -85,6 +123,7 @@ $policyXml = @"
         <header>*</header>
       </allowed-headers>
     </cors>
+    $authBlock
     <set-backend-service base-url="$backendUrl" />
   </inbound>
   <backend><base /></backend>

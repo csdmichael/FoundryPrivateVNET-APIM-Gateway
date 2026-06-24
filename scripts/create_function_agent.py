@@ -4,9 +4,15 @@ All values come from config/function_app_config.json and config/azure_resources.
 The agent reaches the Function App only through the private APIM gateway; the Foundry
 project resolves APIM via its private endpoint, so no traffic leaves the VNet.
 
-Auth model: the APIM API is imported with subscription_required=false and is only
-reachable inside the VNet, so the OpenAPI tool uses anonymous auth. To require a
-subscription key instead, set a key connection and switch to OpenApiConnectionAuthDetails.
+Auth model (best practice): the APIM data-function API is protected with Entra ID token
+validation (validate-azure-ad-token). The OpenAPI tool authenticates with the Foundry
+project's **managed identity**, which requests a token for the audience configured in
+config/function_app_config.json -> apim.entra_auth.audience. APIM validates the token's
+audience, tenant, and object id before forwarding to the private Function backend. This
+replaces fragile IP allowlisting for the agent's egress path. If apim.entra_auth.enabled
+is false, the tool falls back to anonymous auth (dev-IP allowlist only).
+
+Uses the nextgen Azure AI Foundry SDK (azure-ai-projects AIProjectClient).
 
 Usage:
     python scripts/create_function_agent.py
@@ -20,8 +26,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config
 
-from azure.ai.agents import AgentsClient
-from azure.ai.agents.models import OpenApiAnonymousAuthDetails, OpenApiTool
+from azure.ai.projects import AIProjectClient
+from azure.ai.agents.models import (
+    OpenApiAnonymousAuthDetails,
+    OpenApiManagedAuthDetails,
+    OpenApiManagedSecurityScheme,
+    OpenApiTool,
+)
 from azure.identity import DefaultAzureCredential
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -34,10 +45,12 @@ AGENT_CFG = FUNC_CFG["foundry_agent"]
 AGENT_NAME = AGENT_CFG["name"]
 MODEL_DEPLOYMENT = os.environ.get("MODEL_DEPLOYMENT_NAME", AGENT_CFG["model_deployment"])
 TOOL_NAME = AGENT_CFG["tool_name"]
+APIM_CFG = FUNC_CFG["apim"]
+ENTRA_AUTH = APIM_CFG.get("entra_auth", {})
 
 # Server URL the agent calls = APIM gateway + API path (config-driven, no hardcode).
 GATEWAY = RES["apim"]["gateway_url"].rstrip("/")
-API_PATH = FUNC_CFG["apim"]["api_path"].strip("/")
+API_PATH = APIM_CFG["api_path"].strip("/")
 APIM_SERVER_URL = f"{GATEWAY}/{API_PATH}"
 
 
@@ -50,22 +63,36 @@ def _load_openapi_spec() -> dict:
     return spec
 
 
+def _build_auth():
+    """Managed-identity auth when entra_auth is enabled, else anonymous (dev IP allowlist)."""
+    if ENTRA_AUTH.get("enabled"):
+        audience = ENTRA_AUTH["audience"]
+        print(f"Auth: managed identity (audience={audience})")
+        return OpenApiManagedAuthDetails(
+            security_scheme=OpenApiManagedSecurityScheme(audience=audience)
+        )
+    print("Auth: anonymous (APIM dev-IP allowlist)")
+    return OpenApiAnonymousAuthDetails()
+
+
 def main() -> None:
     spec = _load_openapi_spec()
-    auth = OpenApiAnonymousAuthDetails()
     openapi_tool = OpenApiTool(
         name=TOOL_NAME,
         spec=spec,
-        description=FUNC_CFG["apim"]["api_description"],
-        auth=auth,
+        description=APIM_CFG["api_description"],
+        auth=_build_auth(),
     )
 
-    client = AgentsClient(endpoint=PROJECT_ENDPOINT, credential=DefaultAzureCredential())
+    project = AIProjectClient(
+        endpoint=PROJECT_ENDPOINT, credential=DefaultAzureCredential()
+    )
 
-    with client:
-        existing = next((a for a in client.list_agents() if a.name == AGENT_NAME), None)
+    with project:
+        agents = project.agents
+        existing = next((a for a in agents.list_agents() if a.name == AGENT_NAME), None)
         if existing:
-            agent = client.update_agent(
+            agent = agents.update_agent(
                 agent_id=existing.id,
                 model=MODEL_DEPLOYMENT,
                 name=AGENT_NAME,
@@ -74,7 +101,7 @@ def main() -> None:
             )
             print(f"Updated agent '{AGENT_NAME}' (id={agent.id})")
         else:
-            agent = client.create_agent(
+            agent = agents.create_agent(
                 model=MODEL_DEPLOYMENT,
                 name=AGENT_NAME,
                 instructions=AGENT_CFG["instructions"],
