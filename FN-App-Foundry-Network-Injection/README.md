@@ -34,6 +34,7 @@ scripts or function code; they all come from
   - [Step 5 — Create the agent (direct, no APIM)](#step-5--create-the-agent-direct-no-apim)
   - [Step 6 — Test the agent](#step-6--test-the-agent)
 - [Validate from a VNet jump box (Azure Bastion)](#validate-from-a-vnet-jump-box-azure-bastion)
+- [Resolving the Agent 403 ("Ip Forbidden") Error](#resolving-the-agent-403-ip-forbidden-error)
 - [Standard Agent Setup Prerequisite (Read Before Step 3)](#standard-agent-setup-prerequisite-read-before-step-3)
 - [Deployment Steps — Network Injection Setup & Config](#deployment-steps--network-injection-setup--config)
 - [Network Flow Summary](#network-flow-summary)
@@ -366,7 +367,7 @@ The agent invokes `data_function_api` → (private DNS) → private Function App
 > function (Step 2 / the deploy script set this up). If the data proxy resolves the function to
 > its **public** IP, the call egresses to the public front door and returns
 > `HTTP 403 Ip Forbidden` once public access is disabled — see
-> [Troubleshooting](#troubleshooting).
+> [Resolving the Agent 403 ("Ip Forbidden") Error](#resolving-the-agent-403-ip-forbidden-error).
 
 #### Re-locking the Function App after an out-of-band recreate
 
@@ -439,8 +440,9 @@ python ./scripts/test_ni_function_agent.py
 
 If step 1 returns `10.50.2.10` and step 3 returns grounded data with **no `403 Ip Forbidden`**,
 the private path is proven. If the tool call still egresses publicly from inside the VNet, the
-architecture is correct and the remaining issue is on the platform's data-proxy egress — open a
-Microsoft support ticket (see [Troubleshooting](#troubleshooting)).
+architecture is correct and the remaining issue is on the platform's data-proxy egress — work
+through [Resolving the Agent 403 ("Ip Forbidden") Error](#resolving-the-agent-403-ip-forbidden-error)
+(rebuild the account capability host), and open a Microsoft support ticket if it persists.
 
 ### Tear down (stop hourly billing)
 
@@ -450,6 +452,162 @@ Microsoft support ticket (see [Troubleshooting](#troubleshooting)).
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/provision-jumpbox.ps1 -Delete
 ```
+
+---
+
+## Resolving the Agent 403 ("Ip Forbidden") Error
+
+The most common failure after the function is locked down (`publicNetworkAccess=Disabled`) is that
+the Foundry **agent's OpenAPI tool call** returns:
+
+```text
+tool_user_error ... HTTP error 403: Ip Forbidden
+```
+
+with an HTML body (`403 - Web App - Unavailable`) and a response header
+`x-ms-forbidden-ip: <a PUBLIC IP that rotates on every call>` (for example `172.200.137.220`,
+`20.7.176.5`, `172.176.98.95`).
+
+### What it means
+
+The agent's single-tenant **data proxy** — the component the platform injects into your
+`agents-injection` subnet to make tool calls — resolved the Function App hostname to its **public**
+front-door IP and egressed over the internet instead of through the **private endpoint**
+(`10.50.2.10`). Once public access is disabled, the public front door rejects the request, so you
+see a `403 Ip Forbidden`. This is **not** a problem with the function code, the OpenAPI spec, APIM
+(there is none here), or a token — it is the managed agent network resolving/reaching the function
+publicly.
+
+```mermaid
+flowchart LR
+    AGENT["Agent data proxy\n(agents-injection subnet)"]
+    PE["Function private endpoint\n10.50.2.10"]
+    FD["Function PUBLIC front door\n(publicNetworkAccess=Disabled)"]
+    AGENT -- "intended: private DNS" --> PE
+    AGENT -. "actual: resolved PUBLIC IP\n→ 403 Ip Forbidden" .-> FD
+```
+
+### Why recreating only the *project* capability host does not fix it
+
+The injected agent **environment and its outbound/data-proxy network** are provisioned by the
+**account** capability host (`caphost-acc-ni`), not the project one. Per the Foundry docs —
+*"Changing or updating outbound networking … you must redeploy Foundry to add outbound
+networking"* — the managed network only re-reads your private DNS when the **account** capability
+host is rebuilt. Recreating only the project capability host
+([`recreate-ni-project-caphost.ps1`](scripts/recreate-ni-project-caphost.ps1)) leaves the stale
+public DNS view in place, so the 403 persists.
+
+### Step-by-step fix
+
+Work through these in order; stop as soon as the agent returns grounded data with no 403.
+
+**1. Confirm the network config is actually correct (rules out DNS/PE mistakes).**
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/verify-ni-func-private.ps1
+```
+
+All of the following must hold:
+
+- The injected VNet uses **Azure default DNS** (no custom `dnsServers`, which would bypass the
+  private zones).
+- `privatelink.azurewebsites.net` is **linked** to `vnet-fdryvnetgw-ni-eastus2`.
+- An **A record** maps `func-fdryvnetgw-data-ni-eastus2` (and `.scm`) to the private IP
+  `10.50.2.10`.
+- The Function App is `publicNetworkAccess=Disabled` with its `sites` private endpoint **Approved**.
+
+**2. Prove resolution from *inside* the VNet (the definitive DNS check).**
+
+From the [jump box](#validate-from-a-vnet-jump-box-azure-bastion):
+
+```powershell
+nslookup func-fdryvnetgw-data-ni-eastus2.azurewebsites.net   # must return 10.50.2.10
+```
+
+If this returns the **private** IP, your DNS/PE is correct and the fault is the managed agent
+network's stale view — continue to step 3. (In this environment, the jump box confirmed
+`10.50.2.10`, so the architecture is verified correct.)
+
+**3. Force a FULL redeploy of the injected agent network (rebuild the *account* capability host).**
+
+This is the actual fix for the stale data-proxy DNS view. The new script tears down and rebuilds
+the **whole** injected agent environment in the correct dependency order:
+
+```powershell
+# Preview the actions first (no changes)
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/redeploy-ni-agent-network.ps1 -WhatIf
+
+# Execute the redeploy (long-running: ~15-40 min; caphost creates poll until Succeeded)
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/redeploy-ni-agent-network.ps1
+```
+
+The script runs, idempotently, in this order:
+
+1. **DELETE** the project capability host (poll until `404`).
+2. **DELETE** the account capability host (poll until `404`).
+3. **Re-assert** the `networkInjections` PATCH (`agent` → `agents-injection`,
+   `useMicrosoftManagedNetwork=false`).
+4. **CREATE** the account capability host (poll until `Succeeded`).
+5. **CREATE** the project capability host with the same BYO connections (poll until `Succeeded`).
+
+> ⚠️ **Critical — the account capability host PUT now requires `customerSubnet`.** Once the
+> account has a `networkInjections` record, recreating the account capability host with the bare
+> `{ "capabilityHostKind": "Agents" }` body **fails** with:
+>
+> ```text
+> UserError: The customerSubnet property must match the subnet recorded on the Foundry account.
+> ```
+>
+> The account capability host body must therefore include the `agents-injection` subnet ARM id:
+>
+> ```json
+> {
+>   "properties": {
+>     "capabilityHostKind": "Agents",
+>     "customerSubnet": ".../virtualNetworks/vnet-fdryvnetgw-ni-eastus2/subnets/agents-injection"
+>   }
+> }
+> ```
+>
+> The **project** capability host body is unchanged (`capabilityHostKind` + the three BYO
+> connections; **no** `customerSubnet`). `redeploy-ni-agent-network.ps1` builds both bodies from
+> [`config/network_injection_config.json`](config/network_injection_config.json) automatically.
+
+**4. Re-create the agent (the env rebuild may have removed it).**
+
+Run from a VNet-connected host (the jump box) or while the account is IP-allowed:
+
+```powershell
+python ./scripts/create_ni_function_agent.py
+```
+
+**5. Re-test with the account FULLY private.**
+
+```powershell
+# Return the account to publicNetworkAccess=Disabled (representative posture)
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/enable-portal-access.ps1 -Mode Revert
+
+# From the jump box, run the agent end-to-end
+python ./scripts/test_ni_function_agent.py "List the product categories."
+```
+
+A `200` with grounded data and **no `403 Ip Forbidden`** confirms the account-caphost rebuild
+fixed the data-proxy egress.
+
+### If it still 403s after the full redeploy
+
+If the tool call **still** egresses to a public IP after (1) verified-correct DNS/PE,
+(2) in-VNet `nslookup` returning `10.50.2.10`, and (3) a full account-capability-host redeploy with
+`customerSubnet`, then the platform's data proxy is not honoring the linked private zone and this is
+no longer a configuration issue. **Open a Microsoft support ticket**, citing:
+
+- VNet DNS is Azure default; `privatelink.azurewebsites.net` linked; A record → `10.50.2.10`.
+- In-VNet `nslookup` resolves the function to its private endpoint.
+- The account **and** project capability hosts were deleted and recreated (account with
+  `customerSubnet`), yet the OpenAPI tool still returns `403 Ip Forbidden` with a rotating public
+  `x-ms-forbidden-ip`.
+
+Do **not** keep changing configuration — it is verifiably correct at that point.
 
 ---
 
@@ -703,6 +861,7 @@ credential / OIDC).
 | [`scripts/ensure-ni-model-deployment.ps1`](scripts/ensure-ni-model-deployment.ps1) | List gpt-4* models; deploy the agent's chat model (gpt-4.1) |
 | [`scripts/verify-ni-func-private.ps1`](scripts/verify-ni-func-private.ps1) | Verify the Function App is private-only (public access, PE, DNS, A record) |
 | [`scripts/recreate-ni-project-caphost.ps1`](scripts/recreate-ni-project-caphost.ps1) | Delete + recreate the project capability host to refresh the data proxy's private DNS view |
+| [`scripts/redeploy-ni-agent-network.ps1`](scripts/redeploy-ni-agent-network.ps1) | **Full** redeploy of the injected agent network — rebuilds the **account** (with `customerSubnet`) + project capability hosts to fix the agent `403 Ip Forbidden` (see [Resolving the Agent 403](#resolving-the-agent-403-ip-forbidden-error)) |
 | [`scripts/create_ni_function_agent.py`](scripts/create_ni_function_agent.py) | Foundry agent OpenAPI tool (direct, anonymous) |
 | [`scripts/test_ni_function_agent.py`](scripts/test_ni_function_agent.py) | Invoke the agent end-to-end and print the grounded answer |
 | [`function-app/function_app.py`](function-app/function_app.py) | Function code (Python v2) |
@@ -724,7 +883,7 @@ credential / OIDC).
 | Agent run fails `invalid_engine_error: Failed to resolve model info` | No model deployment on the project | Run `scripts/ensure-ni-model-deployment.ps1 -Deploy` to deploy `gpt-4.1` |
 | Agent run fails `invalid_deployment: The API deployment ... does not exist` | Model deployment created < ~5 min ago | Wait briefly and re-run the test; the deployment is still propagating |
 | Tool URL hits `/api/api/...` (404) | Tool server URL set to `.../api` while spec paths already include `/api` | Use the host root as the server URL (`create_ni_function_agent.py` now does this) |
-| Agent tool call returns `HTTP 403 Ip Forbidden` (HTML "Web App - Unavailable", header `x-ms-forbidden-ip: <rotating public IP>`) after public access is disabled | The data proxy resolved the function to its **public** IP and egressed to the public front door instead of the private endpoint | This requires VNet-side validation, not more config changes. 1) Confirm config is correct with `verify-ni-func-private.ps1` — the VNet must use **Azure default DNS** (no custom DNS servers, which would bypass private zones), `privatelink.azurewebsites.net` must be **linked** to the injected VNet, and an A record must point the function to its private IP. 2) Per the docs' [*Verify the deployment*](https://learn.microsoft.com/azure/ai-foundry/agents/how-to/virtual-networks) steps 3–4, validate from a **VNet-joined host**: `nslookup func-...azurewebsites.net` must return the private IP, then run the agent **with the Foundry account fully private** (`enable-portal-access.ps1 -Mode Revert`). The Standard Setup's "no public egress" guarantee applies to the fully-private posture; testing while the account is temporarily IP-allowed for internet access is not representative. 3) If the function PE/DNS were created **after** the capability host, recreate the project capability host (`recreate-ni-project-caphost.ps1`) so the data proxy re-reads current private DNS. 4) If it still egresses publicly after all of the above, open a **Microsoft support** ticket — the data proxy is not honoring the linked private zone |
+| Agent tool call returns `HTTP 403 Ip Forbidden` (HTML "Web App - Unavailable", header `x-ms-forbidden-ip: <rotating public IP>`) after public access is disabled | The data proxy resolved the function to its **public** IP and egressed to the public front door instead of the private endpoint | Follow the dedicated [Resolving the Agent 403 ("Ip Forbidden") Error](#resolving-the-agent-403-ip-forbidden-error) section: verify DNS/PE config, prove in-VNet `nslookup` → `10.50.2.10`, then run `redeploy-ni-agent-network.ps1` to rebuild the **account** capability host (with `customerSubnet`) — recreating only the project caphost is **not** enough. Re-test with the account fully private; if it still 403s, open a Microsoft support ticket |
 | Foundry portal shows a network/access error | Your machine isn't on a VNet path and isn't allowlisted | Use [Step 4](#step-4--give-your-machine-access-to-the-private-foundry-portal): Pattern A (JumpBox) or Pattern B (IpAllow) |
 | Portal still blocked after IpAllow | Egress IP rotates (Azure SNAT) or portal backend probe denied | Prefer Pattern A (JumpBox); IP allowlisting can't cover rotating/backend IPs |
 | Zip deploy fails after lockdown | SCM site is private | Deploy code before disabling public access, or from a VNet host |
