@@ -135,6 +135,22 @@
     "jumpbox_subnet": "dev-jumpbox",
     "jumpbox_subnet_prefix": "10.50.4.0/24"
   },
+  "jumpbox": {
+    "comment": "Windows VM + Azure Bastion for Pattern A (private path) validation INSIDE the injected VNet. Provisioned by scripts/provision-jumpbox.ps1. The VM has NO public IP; you reach it only through Bastion (browser RDP). From the VM you can run nslookup against the private function and execute scripts/test_ni_function_agent.py against the fully-private Foundry account. The Bastion subnet MUST be named exactly 'AzureBastionSubnet' and be /26 or larger. Bastion Basic SKU is the cheapest tier that supports browser RDP. Delete with scripts/provision-jumpbox.ps1 -Delete to stop incurring cost (Bastion + VM both bill hourly).",
+    "vm_name": "vm-jumpbox-ni",
+    "vm_size": "Standard_D2s_v3",
+    "os": "windows",
+    "image": "MicrosoftWindowsServer:WindowsServer:2022-datacenter-azure-edition:latest",
+    "admin_username": "azureuser",
+    "subnet_name": "dev-jumpbox",
+    "subnet_prefix": "10.50.4.0/24",
+    "bastion_name": "bastion-ni",
+    "bastion_subnet_name": "AzureBastionSubnet",
+    "bastion_subnet_prefix": "10.50.5.0/26",
+    "bastion_public_ip_name": "pip-bastion-ni",
+    "bastion_sku": "Basic"
+  },
+
   "foundry_agent": {
     "name": "Data-Function-Agent",
     "model_deployment": "gpt-4.1",

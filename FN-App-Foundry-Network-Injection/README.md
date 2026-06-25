@@ -33,6 +33,7 @@ scripts or function code; they all come from
   - [Step 4 — Give your machine access to the private Foundry portal](#step-4--give-your-machine-access-to-the-private-foundry-portal)
   - [Step 5 — Create the agent (direct, no APIM)](#step-5--create-the-agent-direct-no-apim)
   - [Step 6 — Test the agent](#step-6--test-the-agent)
+- [Validate from a VNet jump box (Azure Bastion)](#validate-from-a-vnet-jump-box-azure-bastion)
 - [Standard Agent Setup Prerequisite (Read Before Step 3)](#standard-agent-setup-prerequisite-read-before-step-3)
 - [Deployment Steps — Network Injection Setup & Config](#deployment-steps--network-injection-setup--config)
 - [Network Flow Summary](#network-flow-summary)
@@ -384,6 +385,74 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/verify-ni-func-pri
 
 ---
 
+## Validate from a VNet jump box (Azure Bastion)
+
+The **definitive** way to confirm the agent's private path — and the only way to run the test
+while the Foundry account is **fully private** (`publicNetworkAccess=Disabled`) — is from a host
+**inside the injected VNet**. The `Mode IpAllow` workaround opens the account's *inbound* data
+plane to your laptop, which is not the same posture the agent runs under. A small jump box removes
+that variable entirely.
+
+### Provision
+
+```powershell
+# Creates: dev-jumpbox subnet, AzureBastionSubnet, a Standard public IP, Azure Bastion (Basic),
+# and a Windows Server 2022 VM (no public IP). Prompts for the VM admin password securely.
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/provision-jumpbox.ps1
+```
+
+All names/sizes come from the `jumpbox` block in
+[`config/network_injection_config.json`](config/network_injection_config.json):
+
+| Setting | Default | Notes |
+| --- | --- | --- |
+| `vm_name` | `vm-jumpbox-ni` | Windows Server 2022 Datacenter (Azure Edition) |
+| `vm_size` | `Standard_D2s_v3` | 2 vCPU / 8 GiB; eastus2 Compute quota verified |
+| `admin_username` | `azureuser` | password is **prompted**, never stored on disk |
+| `subnet_name` | `dev-jumpbox` (`10.50.4.0/24`) | VM NIC; **no public IP** |
+| `bastion_subnet_name` | `AzureBastionSubnet` (`10.50.5.0/26`) | required exact name, /26+ |
+| `bastion_name` | `bastion-ni` | **Basic** SKU (cheapest tier with browser RDP) |
+
+> The script is **idempotent** — re-running it skips resources that already exist.
+
+### Connect
+
+**Browser RDP (Basic SKU):** Azure portal → **Virtual machines** → `vm-jumpbox-ni` →
+**Connect** → **Bastion** → enter `azureuser` + your password → **Connect**. A desktop opens in
+the browser; no public IP and no RDP port are exposed on the VM.
+
+### Run the in-VNet validation
+
+On the jump box desktop:
+
+```powershell
+# 1) Prove private DNS resolves the function to its PRIVATE endpoint (must be 10.50.2.10)
+nslookup func-fdryvnetgw-data-ni-eastus2.azurewebsites.net
+
+# 2) Install Azure CLI + Python 3.11, clone this repo, then authenticate as yourself
+az login
+
+# 3) With the account FULLY PRIVATE, run the agent end-to-end
+pip install -r requirements.txt
+python ./scripts/test_ni_function_agent.py
+```
+
+If step 1 returns `10.50.2.10` and step 3 returns grounded data with **no `403 Ip Forbidden`**,
+the private path is proven. If the tool call still egresses publicly from inside the VNet, the
+architecture is correct and the remaining issue is on the platform's data-proxy egress — open a
+Microsoft support ticket (see [Troubleshooting](#troubleshooting)).
+
+### Tear down (stop hourly billing)
+
+> **Cost:** Azure Bastion (Basic) and the VM both bill hourly while they exist. Delete them when
+> the validation is done.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/provision-jumpbox.ps1 -Delete
+```
+
+---
+
 ## Standard Agent Setup Prerequisite (Read Before Step 3)
 
 Foundry **virtual network injection** is part of the **Standard Agent setup with private
@@ -630,6 +699,7 @@ credential / OIDC).
 | [`scripts/configure-standard-agent-setup.ps1`](scripts/configure-standard-agent-setup.ps1) | BYO Storage/Search/Cosmos + connections + RBAC + capability hosts |
 | [`scripts/configure-foundry-network-injection.ps1`](scripts/configure-foundry-network-injection.ps1) | Foundry DNS + private endpoint + `networkInjections` PATCH |
 | [`scripts/enable-portal-access.ps1`](scripts/enable-portal-access.ps1) | Portal access: JumpBox / IpAllow / Revert |
+| [`scripts/provision-jumpbox.ps1`](scripts/provision-jumpbox.ps1) | Provision (or `-Delete`) a Windows VM + Azure Bastion in the injected VNet for in-VNet validation |
 | [`scripts/ensure-ni-model-deployment.ps1`](scripts/ensure-ni-model-deployment.ps1) | List gpt-4* models; deploy the agent's chat model (gpt-4.1) |
 | [`scripts/verify-ni-func-private.ps1`](scripts/verify-ni-func-private.ps1) | Verify the Function App is private-only (public access, PE, DNS, A record) |
 | [`scripts/recreate-ni-project-caphost.ps1`](scripts/recreate-ni-project-caphost.ps1) | Delete + recreate the project capability host to refresh the data proxy's private DNS view |
