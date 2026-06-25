@@ -1,0 +1,3 @@
+IP: 10.50.4.4
+User: azureuser
+Pass: 
