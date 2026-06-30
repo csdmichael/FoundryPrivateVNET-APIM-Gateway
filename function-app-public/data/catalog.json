@@ -1,0 +1,81 @@
+{
+  "products": [
+    {
+      "productId": "P-1001",
+      "name": "Contoso Wireless Headset",
+      "category": "audio",
+      "price": 129.99,
+      "currency": "USD",
+      "description": "Over-ear Bluetooth headset with active noise cancellation and 30-hour battery."
+    },
+    {
+      "productId": "P-1002",
+      "name": "Contoso USB-C Earbuds",
+      "category": "audio",
+      "price": 49.99,
+      "currency": "USD",
+      "description": "In-ear USB-C wired earbuds with inline microphone."
+    },
+    {
+      "productId": "P-1003",
+      "name": "Contoso Conference Speaker",
+      "category": "audio",
+      "price": 199.0,
+      "currency": "USD",
+      "description": "360-degree omnidirectional speakerphone for meeting rooms."
+    },
+    {
+      "productId": "P-2001",
+      "name": "Contoso 27\" 4K Monitor",
+      "category": "displays",
+      "price": 379.0,
+      "currency": "USD",
+      "description": "27-inch UHD IPS monitor with USB-C power delivery."
+    },
+    {
+      "productId": "P-2002",
+      "name": "Contoso Portable Monitor",
+      "category": "displays",
+      "price": 229.0,
+      "currency": "USD",
+      "description": "15.6-inch portable FHD monitor with kickstand cover."
+    },
+    {
+      "productId": "P-3001",
+      "name": "Contoso Mechanical Keyboard",
+      "category": "peripherals",
+      "price": 89.99,
+      "currency": "USD",
+      "description": "Compact tenkeyless mechanical keyboard with hot-swappable switches."
+    },
+    {
+      "productId": "P-3002",
+      "name": "Contoso Ergonomic Mouse",
+      "category": "peripherals",
+      "price": 59.99,
+      "currency": "USD",
+      "description": "Vertical ergonomic wireless mouse with adjustable DPI."
+    }
+  ],
+  "categories": [
+    { "category": "audio", "displayName": "Audio" },
+    { "category": "displays", "displayName": "Displays" },
+    { "category": "peripherals", "displayName": "Peripherals" }
+  ],
+  "inventory": {
+    "P-1001": { "totalAvailable": 540, "warehouses": [ { "warehouse": "EAST-DC1", "available": 320 }, { "warehouse": "WEST-DC2", "available": 220 } ] },
+    "P-1002": { "totalAvailable": 1200, "warehouses": [ { "warehouse": "EAST-DC1", "available": 800 }, { "warehouse": "WEST-DC2", "available": 400 } ] },
+    "P-1003": { "totalAvailable": 85, "warehouses": [ { "warehouse": "EAST-DC1", "available": 60 }, { "warehouse": "WEST-DC2", "available": 25 } ] },
+    "P-2001": { "totalAvailable": 140, "warehouses": [ { "warehouse": "EAST-DC1", "available": 90 }, { "warehouse": "WEST-DC2", "available": 50 } ] },
+    "P-2002": { "totalAvailable": 60, "warehouses": [ { "warehouse": "EAST-DC1", "available": 35 }, { "warehouse": "WEST-DC2", "available": 25 } ] },
+    "P-3001": { "totalAvailable": 410, "warehouses": [ { "warehouse": "EAST-DC1", "available": 260 }, { "warehouse": "WEST-DC2", "available": 150 } ] },
+    "P-3002": { "totalAvailable": 330, "warehouses": [ { "warehouse": "EAST-DC1", "available": 180 }, { "warehouse": "WEST-DC2", "available": 150 } ] }
+  },
+  "orders": [
+    { "orderId": "O-5001", "productId": "P-1001", "quantity": 4, "status": "shipped", "orderedAt": "2024-05-02T14:31:00Z" },
+    { "orderId": "O-5002", "productId": "P-2001", "quantity": 2, "status": "pending", "orderedAt": "2024-05-04T09:12:00Z" },
+    { "orderId": "O-5003", "productId": "P-3001", "quantity": 10, "status": "delivered", "orderedAt": "2024-04-28T17:45:00Z" },
+    { "orderId": "O-5004", "productId": "P-1003", "quantity": 1, "status": "cancelled", "orderedAt": "2024-05-01T11:05:00Z" },
+    { "orderId": "O-5005", "productId": "P-1002", "quantity": 25, "status": "shipped", "orderedAt": "2024-05-05T08:20:00Z" }
+  ]
+}

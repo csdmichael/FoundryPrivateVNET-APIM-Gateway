@@ -19,6 +19,7 @@ The primary case study is **publishing AI agents to Microsoft Teams**. Each Foun
 - [Test in Web Chat](#test-in-web-chat)
 - [APIM Configuration](#apim-configuration)
 - [Private Data Function App as a Foundry Agent Tool](#private-data-function-app-as-a-foundry-agent-tool)
+- [Public Data Function App (Swagger Enabled)](#public-data-function-app-swagger-enabled)
 - [AI Gateway Screenshots](#ai-gateway-screenshots)
 - [Pipeline Testing UI](#pipeline-testing-ui)
 - [Configuration](#configuration)
@@ -811,6 +812,54 @@ python ./scripts/create_function_agent.py  # create the Foundry agent OpenAPI to
 
 All resource names, subnets, paths, and the agent definition come from
 [config/function_app_config.json](config/function_app_config.json) — nothing is hardcoded.
+
+## Public Data Function App (Swagger Enabled)
+
+Alongside the private edition, this project includes a **publicly accessible** Function App that serves the
+same data APIs (product catalog, inventory, orders) with an **interactive Swagger UI**. It is intended for
+quick browsing and demos: the APIs and Swagger UI are reachable directly from the internet.
+
+It **shares the existing dedicated B1 Linux App Service plan** `asp-fdryvnetgw-data-eastus` with the private
+edition (a dedicated App Service plan can host multiple apps), but uses its own storage account and a
+system-assigned managed identity for storage access (no account keys — the subscription policy disables
+shared-key access).
+
+> Note: the private network-injection app `func-fdryvnetgw-data-ni-eastus2` runs on a **Flex Consumption
+> (FC1)** plan, which hosts exactly one app and cannot be shared. This public app therefore shares the
+> sibling **dedicated** plan instead, which is the closest equivalent.
+
+### Live URLs
+
+| Resource | URL |
+|----------|-----|
+| **Function App host** | https://func-fdryvnetgw-public-eastus.azurewebsites.net |
+| **Swagger UI** | https://func-fdryvnetgw-public-eastus.azurewebsites.net/api/swagger |
+| **OpenAPI (live)** | https://func-fdryvnetgw-public-eastus.azurewebsites.net/api/openapi.json |
+| **Health probe** | https://func-fdryvnetgw-public-eastus.azurewebsites.net/api/health |
+
+**OpenAPI spec file:** [docs/public-data-function.openapi.json](docs/public-data-function.openapi.json)
+
+### API endpoints
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/api/health` | Service liveness/readiness probe |
+| GET | `/api/products` | List products (optional `?category=`) |
+| GET | `/api/products/{productId}` | Get a single product |
+| GET | `/api/categories` | List product categories with counts |
+| GET | `/api/inventory/{productId}` | Per-warehouse stock for a product |
+| GET | `/api/orders` | List orders (optional `?status=`) |
+| GET | `/api/openapi.json` | OpenAPI 3.0 spec (server URL resolved to caller host) |
+| GET | `/api/swagger` | Interactive Swagger UI |
+
+### Quick start
+
+```powershell
+./scripts/deploy-public-function-app.ps1   # provision storage + app on the shared plan, then deploy code
+```
+
+All resource names come from [config/public_function_app_config.json](config/public_function_app_config.json);
+the app code lives in [function-app-public/](function-app-public/) — nothing is hardcoded.
 
 ## AI Gateway Screenshots
 
