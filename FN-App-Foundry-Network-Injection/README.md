@@ -21,6 +21,7 @@ scripts or function code; they all come from
 - [How This Differs from the APIM Edition](#how-this-differs-from-the-apim-edition)
 - [Architecture](#architecture)
 - [Key Resources & URLs](#key-resources--urls)
+- [Capability Hosts & Data Isolation — Best Practices](#capability-hosts--data-isolation--best-practices)
 - [Why Each Resource Is Private](#why-each-resource-is-private)
 - [Prerequisites](#prerequisites)
 - [Configuration (No Hardcoding)](#configuration-no-hardcoding)
@@ -123,6 +124,52 @@ No hop traverses the public internet, and there is no APIM gateway in the path.
 
 > All values are derived from [`config/network_injection_config.json`](config/network_injection_config.json).
 > Change a name there and the scripts and these URLs change with it.
+
+---
+
+## Capability Hosts & Data Isolation — Best Practices
+
+The deck [**Foundry Agent Service — Capability Hosts & Private Network Injection**](../docs/Foundry-CapabilityHost-NetworkInjection-BestPractices.pdf)
+([`docs/Foundry-CapabilityHost-NetworkInjection-BestPractices.pdf`](../docs/Foundry-CapabilityHost-NetworkInjection-BestPractices.pdf))
+covers when to **share vs. separate** Storage, Cosmos DB, and AI Search across projects for the Standard Agent
+(BYO VNet + tools behind VNet) topology this folder deploys. Summary:
+
+- **Share the platform, route data per project.** One network-isolated Foundry account, the injected VNet + agent
+  subnet, and model deployments are shared across every project. Each **project capability host** then names the exact
+  Storage, Cosmos DB, and AI Search connections it uses.
+- **Isolated by default.** The standard setup provisions per-project containers in Storage (2/project) and Cosmos DB
+  (3–5/project) — strict boundaries with no extra config.
+- **No inheritance.** A project uses *only* the connections referenced in its own project capability host, even if the
+  account defines others.
+- **Two scopes bind capability hosts.** The **account** host enables Agent Service (empty body except
+  `capabilityHostKind = 'Agents'`; its connections are inherited by *new* projects, but the host config is not). The
+  **project** host is what Agent Service reads at runtime. Rules: one host per scope (a second returns **409 Conflict**),
+  **no in-place updates** (delete + recreate to change config), and the **account host must exist first**.
+- **Network injection keeps tools + data private.** Agent compute runs in your delegated agent subnet; Storage, Cosmos,
+  and AI Search sit behind private endpoints with **public network access = Disabled**.
+- **Sharing vs. separating tradeoffs:** Storage — share the account (per-project containers already isolate data);
+  Cosmos DB — share to pool RU/s, or separate for noisy-neighbor isolation and independent scaling; AI Search — one
+  shared service with a **per-project index**, split into separate services only for security isolation or quota limits.
+- **Cosmos RU/s planning when sharing one account:** ~**5,000 RU/s/project** for Responses API agents (5 containers),
+  **3,000 RU/s/project** for classic agents (3 containers); minimum **3,000 RU/s** total. Too little RU/s → capability
+  host provisioning fails.
+- **For LAM Research:** use **template 19** (tools behind the VNet) — one isolated account; share the account, VNet, and
+  model deployments; keep Storage and Cosmos containers dedicated per project (isolated by default); one AI Search
+  service with a per-project index; size Cosmos at ~5,000 RU/s × projects; keep public access **Disabled**.
+
+### Published capability-host data services (Azure Portal)
+
+The BYO resources this project's capability host references (open in the Azure portal to inspect them directly):
+
+| Service | Resource | Azure Portal |
+|---------|----------|--------------|
+| Azure Storage (files) | `stfdryniagent` (eastus2) | [Open in portal](https://portal.azure.com/#@b158173c-91f6-4f99-b5e9-aa9bcb463863/resource/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.Storage/storageAccounts/stfdryniagent/overview) |
+| Azure Cosmos DB (threads) | `cosmos-fdryvnetgw-ni` (serverless, eastus2) | [Open in portal](https://portal.azure.com/#@b158173c-91f6-4f99-b5e9-aa9bcb463863/resource/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-fdryvnetgw-ni/overview) |
+| Azure AI Search (vectors) | `srch-fdryvnetgw-ni` (basic, eastus) | [Open in portal](https://portal.azure.com/#@b158173c-91f6-4f99-b5e9-aa9bcb463863/resource/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.Search/searchServices/srch-fdryvnetgw-ni/overview) |
+
+> These are the resource names from [`config/network_injection_config.json`](config/network_injection_config.json)
+> (`standard_agent.storage`, `standard_agent.cosmosdb`, `standard_agent.search`). With lockdown enabled they are
+> private-endpoint-only — the portal **Overview** blade works, but data-plane views (containers, indexes) require a VNet path.
 
 ---
 
