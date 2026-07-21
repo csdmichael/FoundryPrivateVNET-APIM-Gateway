@@ -134,6 +134,8 @@ The deck [**Foundry Agent Service — Capability Hosts & Private Network Injecti
 covers when to **share vs. separate** Storage, Cosmos DB, and AI Search across projects for the Standard Agent
 (BYO VNet + tools behind VNet) topology this folder deploys. Summary:
 
+![New Foundry Resource Model — Account/Projects hierarchy: projects own agents, files, evaluations, project-level RBAC, capability hosts, and project settings, while sharing the parent Foundry resource's network configuration, model deployments, AI Gateway configuration, and base governance controls](../docs/Screenshots/Fondry-Account-Projects-Hierarchy.png)
+
 - **Share the platform, route data per project.** One network-isolated Foundry account, the injected VNet + agent
   subnet, and model deployments are shared across every project. Each **project capability host** then names the exact
   Storage, Cosmos DB, and AI Search connections it uses.
