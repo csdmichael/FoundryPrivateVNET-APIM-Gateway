@@ -129,6 +129,35 @@
       "use_microsoft_managed_network": false
     }
   },
+  "observability": {
+    "comment": "Dedicated private monitoring for this Foundry project. The diagnostic setting sends Foundry account platform logs to Log Analytics. The workspace-based Application Insights component is connected to the project to enable Foundry server-side agent traces. AMPLS and its private endpoint keep ingestion and query traffic on the VNet; public ingestion and query access are disabled after private DNS is configured.",
+    "log_analytics_workspace_name": "log-fdryvnetgw-ni-eastus2",
+    "application_insights_name": "appi-fdryvnetgw-ni-eastus2",
+    "application_insights_connection_name": "appi-fdryvnetgw-ni-connection",
+    "diagnostic_setting_name": "foundry-ni-to-log-analytics",
+    "diagnostic_log_categories": [
+      "Audit",
+      "RequestResponse",
+      "AzureOpenAIRequestUsage",
+      "Trace",
+      "ManagedNetworkEvent"
+    ],
+    "retention_in_days": 30,
+    "public_network_access_for_ingestion": "Disabled",
+    "public_network_access_for_query": "Disabled",
+    "private_link_scope_name": "ampls-fdryvnetgw-ni",
+    "private_endpoint_name": "pe-ampls-ni-eastus2",
+    "private_endpoint_connection_name": "pe-ampls-ni-conn",
+    "private_endpoint_group_id": "azuremonitor",
+    "dns_zone_group_name": "azure-monitor-ni-zone-group",
+    "private_dns_zones": [
+      "privatelink.monitor.azure.com",
+      "privatelink.oms.opinsights.azure.com",
+      "privatelink.ods.opinsights.azure.com",
+      "privatelink.agentsvc.azure-automation.net",
+      "privatelink.blob.core.windows.net"
+    ]
+  },
   "portal_access": {
     "comment": "How a developer machine reaches the fully-private Foundry portal. Pattern A (preferred) = a VNet path (Bastion jump box / VPN / dev tunnel) into the injected VNet. Pattern B (temporary) = flip the account to publicNetworkAccess=Enabled + networkAcls.defaultAction=Deny + ipRules and allow the developer IP. scripts/enable-portal-access.ps1 implements Pattern B when -Mode IpAllow is passed.",
     "developer_ips": ["67.180.58.197"],

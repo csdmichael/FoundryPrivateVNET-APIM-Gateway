@@ -38,6 +38,7 @@ scripts or function code; they all come from
 - [Resolving the Agent 403 ("Ip Forbidden") Error](#resolving-the-agent-403-ip-forbidden-error)
 - [Standard Agent Setup Prerequisite (Read Before Step 3)](#standard-agent-setup-prerequisite-read-before-step-3)
 - [Deployment Steps — Network Injection Setup & Config](#deployment-steps--network-injection-setup--config)
+- [Private Diagnostics and Agent Tracing](#private-diagnostics-and-agent-tracing)
 - [Network Flow Summary](#network-flow-summary)
 - [Deployment Workflow (CI)](#deployment-workflow-ci)
 - [Configuration Reference](#configuration-reference)
@@ -855,6 +856,118 @@ resolves the Function App's private endpoint via private DNS and calls
 
 ---
 
+## Private Diagnostics and Agent Tracing
+
+Foundry observability has two complementary data paths. A **diagnostic setting** exports account
+platform logs such as requests, usage, audits, and managed-network events. The Foundry **Agents >
+Traces** experience is different: server-side agent spans are stored in a project-connected,
+workspace-based **Application Insights** resource. Configure both if customers need operational
+logs and per-agent conversation traces.
+
+```mermaid
+flowchart LR
+   Foundry[Foundry account] -->|diagnostic setting| LAW[Log Analytics]
+   Agent[Foundry agent runtime] -->|server-side OpenTelemetry spans| AppI[Application Insights]
+   AppI --> LAW
+   LAW --> AMPLS[Azure Monitor Private Link Scope]
+   AppI --> AMPLS
+   AMPLS --> PE[Private endpoint in private-endpoints]
+   PE --> DNS[Five Azure Monitor private DNS zones]
+   DNS --> Client[VNet client or Bastion jump box]
+   Internet[Public network] -. blocked .-> LAW
+   Internet -. blocked .-> AppI
+```
+
+### Deployed values
+
+All values come from the `observability` block in
+[`config/network_injection_config.json`](config/network_injection_config.json).
+
+| Setting | This deployment | Customer guidance |
+|---------|-----------------|-------------------|
+| Log Analytics workspace | `log-fdryvnetgw-ni-eastus2` | Use a dedicated workspace when trace access, retention, or chargeback differs from shared platform logs |
+| Application Insights | `appi-fdryvnetgw-ni-eastus2` | Must be workspace-based and connected to the Foundry **project**, not only the parent account |
+| Foundry connection | `appi-fdryvnetgw-ni-connection` | Category `AppInsights`; the script resolves its connection string at runtime and never stores it in config |
+| Diagnostic setting | `foundry-ni-to-log-analytics` | Sends `Audit`, `RequestResponse`, `AzureOpenAIRequestUsage`, `Trace`, and `ManagedNetworkEvent` |
+| AMPLS | `ampls-fdryvnetgw-ni` | Uses `PrivateOnly` for ingestion and query |
+| Private endpoint | `pe-ampls-ni-eastus2` | Group ID `azuremonitor`, placed in the existing `private-endpoints` subnet |
+| Retention | 30 days | Increase to match regulatory and incident-response requirements |
+| Public access | `Disabled` for ingestion and query on both monitoring resources | Query from a VPN/ExpressRoute/VNet client or the Bastion jump box |
+
+The AMPLS endpoint requires these five private DNS zones, all linked to the client VNet:
+
+- `privatelink.monitor.azure.com`
+- `privatelink.oms.opinsights.azure.com`
+- `privatelink.ods.opinsights.azure.com`
+- `privatelink.agentsvc.azure-automation.net`
+- `privatelink.blob.core.windows.net`
+
+> Diagnostic-setting delivery to Log Analytics uses an Azure-managed channel and continues when
+> public ingestion is disabled. Agent trace ingestion and interactive queries use Azure Monitor
+> endpoints; AMPLS, its private endpoint, and private DNS must therefore be configured before the
+> workspace and Application Insights public-access flags are disabled.
+
+### Deploy or reproduce
+
+```powershell
+./scripts/configure-private-observability.ps1
+```
+
+The script is idempotent and performs this order:
+
+1. Create the dedicated Log Analytics workspace and workspace-based Application Insights.
+2. Create an AMPLS with private-only ingestion/query and add both resources as scoped resources.
+3. Create/link all five DNS zones and the `azuremonitor` private endpoint.
+4. Disable public ingestion and query on both monitoring resources.
+5. Add a second diagnostic setting to the Foundry account. Existing policy-managed settings are
+  preserved.
+6. Connect Application Insights to `proj-default`, which enables Foundry server-side tracing
+  without agent code changes.
+
+For a customer deployment, change only the `observability` names, retention, and diagnostic
+categories in config. Keep the AMPLS group ID and five private DNS zone names unchanged in Azure
+Public Cloud. Run the script from an identity with permission to create monitoring resources,
+private endpoints/DNS links, diagnostic settings, and Foundry project connections.
+
+### Validate logs and traces
+
+1. From a VNet-connected client, confirm `api.monitor.azure.com` and the workspace-specific
+  `*.ods.opinsights.azure.com`/`*.oms.opinsights.azure.com` names resolve to the AMPLS private
+  endpoint addresses.
+2. Run `scripts/test_ni_function_agent.py` or send a Playground prompt such as *"List all products
+  in the audio category."*
+3. Wait several minutes, then open **Foundry > proj-default > Agents > Traces** from the same VNet
+  path. The new run should show its trace, spans, duration, status, model call, and OpenAPI tool
+  call.
+4. Query Application Insights to verify the underlying server-side spans:
+
+```kusto
+union withsource=TableName isfuzzy=true AppRequests, AppDependencies, AppTraces
+| where TimeGenerated > ago(24h)
+| extend AgentName = tostring(Properties["gen_ai.agent.name"])
+| where AgentName == "Data-Function-Agent" or Name has "Data-Function-Agent"
+| project TimeGenerated, TableName, Name, OperationId, Success, DurationMs, AgentName
+| order by TimeGenerated desc
+```
+
+5. Query the workspace for account diagnostic records independently of agent spans:
+
+```kusto
+search *
+| where TimeGenerated > ago(24h)
+| where _ResourceId =~ "/subscriptions/86b37969-9445-49cf-b03f-d8866235171c/resourceGroups/ai-myaacoub/providers/Microsoft.CognitiveServices/accounts/003-ai-poc-network-injection"
+| order by TimeGenerated desc
+```
+
+Users viewing traces need access to the Foundry project and at least **Log Analytics Reader** on
+the connected Application Insights/workspace scope. Trace payloads can contain prompts, model
+outputs, and tool arguments/results; apply least-privilege RBAC, suitable retention, and data
+redaction policies. With public query access disabled, the Foundry and Azure portal trace views
+must be opened through the private VNet path; browser local-network access may also need to be
+allowed for `portal.azure.com`.
+
+---
+
 ## Network Flow Summary
 
 ```mermaid
@@ -911,6 +1024,7 @@ credential / OIDC).
 | [`scripts/verify-ni-func-private.ps1`](scripts/verify-ni-func-private.ps1) | Verify the Function App is private-only (public access, PE, DNS, A record) |
 | [`scripts/recreate-ni-project-caphost.ps1`](scripts/recreate-ni-project-caphost.ps1) | Delete + recreate the project capability host to refresh the data proxy's private DNS view |
 | [`scripts/redeploy-ni-agent-network.ps1`](scripts/redeploy-ni-agent-network.ps1) | **Full** redeploy of the injected agent network — rebuilds the **account** (with `customerSubnet`) + project capability hosts to fix the agent `403 Ip Forbidden` (see [Resolving the Agent 403](#resolving-the-agent-403-ip-forbidden-error)) |
+| [`scripts/configure-private-observability.ps1`](scripts/configure-private-observability.ps1) | Private Log Analytics + Application Insights, AMPLS/PE/DNS, Foundry diagnostic setting, and project trace connection |
 | [`scripts/create_ni_function_agent.py`](scripts/create_ni_function_agent.py) | Foundry agent OpenAPI tool (direct, anonymous) |
 | [`scripts/test_ni_function_agent.py`](scripts/test_ni_function_agent.py) | Invoke the agent end-to-end and print the grounded answer |
 | [`function-app/function_app.py`](function-app/function_app.py) | Function code (Python v2) |
@@ -937,6 +1051,8 @@ credential / OIDC).
 | Portal still blocked after IpAllow | Egress IP rotates (Azure SNAT) or portal backend probe denied | Prefer Pattern A (JumpBox); IP allowlisting can't cover rotating/backend IPs |
 | Zip deploy fails after lockdown | SCM site is private | Deploy code before disabling public access, or from a VNet host |
 | `create_ni_function_agent.py` cannot connect | Run from the public internet against a private account | Run from inside the VNet, or while the account is IP-allowed (Step 4) |
+| Foundry Agents > Traces is empty | Application Insights is not connected, no run occurred after connection, ingestion is delayed, or the viewer lacks Log Analytics access | Re-run `configure-private-observability.ps1`, generate a new agent run, wait several minutes, and grant Log Analytics Reader |
+| Traces or Logs portal view cannot connect | Public query access is disabled and the browser is outside the AMPLS-connected VNet, private DNS is missing, or browser local-network access is blocked | Use the Bastion/VPN path, verify all five Azure Monitor DNS zones resolve privately, and allow portal local-network access in the browser |
 
 ---
 
@@ -956,3 +1072,6 @@ credential / OIDC).
 - [How to use Azure AI Foundry Agent Service with OpenAPI Specified Tools](https://learn.microsoft.com/azure/ai-foundry/agents/how-to/tools/openapi-spec)
 - [Azure Private DNS zones for private endpoints](https://learn.microsoft.com/azure/private-link/private-endpoint-dns)
 - [Azure Bastion overview](https://learn.microsoft.com/azure/bastion/bastion-overview)
+- [Set up tracing in Microsoft Foundry](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup)
+- [Diagnostic settings in Azure Monitor](https://learn.microsoft.com/azure/azure-monitor/platform/diagnostic-settings)
+- [Configure private link for Azure Monitor](https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-configure)
