@@ -894,6 +894,30 @@ All values come from the `observability` block in
 | Retention | 30 days | Increase to match regulatory and incident-response requirements |
 | Public access | `Disabled` for ingestion and query on both monitoring resources | Query from a VPN/ExpressRoute/VNet client or the Bastion jump box |
 
+### Portal evidence
+
+**1. The Log Analytics workspace is attached to the private monitoring boundary.** On the
+workspace **Network isolation > Private access** tab, `log-fdryvnetgw-ni-eastus2` is listed as a
+scoped resource of `ampls-fdryvnetgw-ni/log-analytics`. This association routes workspace query
+and ingestion endpoints through the Azure Monitor Private Link Scope and its private endpoint.
+
+![Log Analytics Network isolation page showing log-fdryvnetgw-ni-eastus2 connected to the ampls-fdryvnetgw-ni Log Analytics scoped resource](../docs/Screenshots/Private%20Diagnostics%20and%20Agent%20Tracing/01-log-analytics-ampls-private-access.png)
+
+**2. Public inbound access is restricted for both monitoring paths.** The workspace public-network
+settings show **Restricted public inbound, enabled public outbound** for both ingestion and query.
+This blocks unrestricted internet clients from sending or querying telemetry. The “enabled public
+outbound” part permits service-initiated outbound traffic; it does not reopen public inbound access.
+VNet clients reach the workspace through AMPLS and private DNS.
+
+![Log Analytics Public network access settings showing restricted public inbound access for ingestion and query](../docs/Screenshots/Private%20Diagnostics%20and%20Agent%20Tracing/02-log-analytics-public-network-access.png)
+
+**3. Foundry receives server-side agent traces through the connected Application Insights
+resource.** The **Data-Function-Agent > Traces** view shows a completed run with its trace ID,
+creation time, duration, status, and agent version. Opening the trace exposes the model and OpenAPI
+tool spans used to diagnose the private agent-to-Function request path.
+
+![Microsoft Foundry Data-Function-Agent Traces view showing a completed server-side agent trace](../docs/Screenshots/Private%20Diagnostics%20and%20Agent%20Tracing/03-foundry-agent-traces.png)
+
 The AMPLS endpoint requires these five private DNS zones, all linked to the client VNet:
 
 - `privatelink.monitor.azure.com`
